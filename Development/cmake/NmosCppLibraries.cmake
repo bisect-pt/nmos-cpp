@@ -426,6 +426,7 @@ set(NMOS_IS05_V1_2_SCHEMAS_JSON
     third_party/is-05/${NMOS_IS05_V1_2_TAG}/APIs/schemas/constraints-schema.json
     third_party/is-05/${NMOS_IS05_V1_2_TAG}/APIs/schemas/constraints-schema-mqtt.json
     third_party/is-05/${NMOS_IS05_V1_2_TAG}/APIs/schemas/constraints-schema-rtp.json
+    third_party/is-05/${NMOS_IS05_V1_2_TAG}/APIs/schemas/constraints-schema-usb.json
     third_party/is-05/${NMOS_IS05_V1_2_TAG}/APIs/schemas/constraints-schema-websocket.json
     third_party/is-05/${NMOS_IS05_V1_2_TAG}/APIs/schemas/error.json
     third_party/is-05/${NMOS_IS05_V1_2_TAG}/APIs/schemas/receiver_transport_params.json
@@ -433,6 +434,7 @@ set(NMOS_IS05_V1_2_SCHEMAS_JSON
     third_party/is-05/${NMOS_IS05_V1_2_TAG}/APIs/schemas/receiver_transport_params_ext.json
     third_party/is-05/${NMOS_IS05_V1_2_TAG}/APIs/schemas/receiver_transport_params_mqtt.json
     third_party/is-05/${NMOS_IS05_V1_2_TAG}/APIs/schemas/receiver_transport_params_mxl.json
+    third_party/is-05/${NMOS_IS05_V1_2_TAG}/APIs/schemas/receiver_transport_params_usb.json
     third_party/is-05/${NMOS_IS05_V1_2_TAG}/APIs/schemas/receiver_transport_params_rtp.json
     third_party/is-05/${NMOS_IS05_V1_2_TAG}/APIs/schemas/receiver_transport_params_websocket.json
     third_party/is-05/${NMOS_IS05_V1_2_TAG}/APIs/schemas/receiver-response-schema.json
@@ -443,6 +445,7 @@ set(NMOS_IS05_V1_2_SCHEMAS_JSON
     third_party/is-05/${NMOS_IS05_V1_2_TAG}/APIs/schemas/sender_transport_params_ext.json
     third_party/is-05/${NMOS_IS05_V1_2_TAG}/APIs/schemas/sender_transport_params_mqtt.json
     third_party/is-05/${NMOS_IS05_V1_2_TAG}/APIs/schemas/sender_transport_params_mxl.json
+    third_party/is-05/${NMOS_IS05_V1_2_TAG}/APIs/schemas/sender_transport_params_usb.json
     third_party/is-05/${NMOS_IS05_V1_2_TAG}/APIs/schemas/sender_transport_params_rtp.json
     third_party/is-05/${NMOS_IS05_V1_2_TAG}/APIs/schemas/sender_transport_params_websocket.json
     third_party/is-05/${NMOS_IS05_V1_2_TAG}/APIs/schemas/sender-receiver-base.json
@@ -1261,6 +1264,7 @@ set(NMOS_CPP_NMOS_HEADERS
     nmos/transfer_characteristic.h
     nmos/transport.h
     nmos/type.h
+    nmos/usb.h
     nmos/version.h
     nmos/video_jxsv.h
     nmos/vpid_code.h

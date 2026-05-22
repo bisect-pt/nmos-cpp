@@ -176,6 +176,10 @@ namespace nmos
         const web::json::field_as_value_or mxl_domain_id{ U("mxl_domain_id"), {} }; // UUID string, auto, or null
         const web::json::field_as_value_or mxl_flow_id{ U("mxl_flow_id"), {} }; // senders: UUID, auto, or null; receivers: UUID or null
 
+         // for urn:x-nmos:transport:usb (see AMWA BCP-007-02 NMOS with IPMX/USB)
+        const web::json::field_as_value_or usb_source_ip{ U("usb_source_ip"), {} }; // senders: string or auto; receiver: string or null
+        const web::json::field_as_value_or usb_source_port{ U("usb_source_port"), {} }; // senders: integer or auto; receivers: integer or null
+        const web::json::field_as_value_or usb_interface_ip{ U("usb_interface_ip"), {} }; // receivers: string or auto
         // IS-07 Event & Tally
 
         // for events_api

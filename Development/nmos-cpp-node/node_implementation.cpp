@@ -51,9 +51,9 @@
 #include "nmos/system_resources.h"
 #include "nmos/transfer_characteristic.h"
 #include "nmos/transport.h"
+#include "nmos/usb.h"
 #include "nmos/video_jxsv.h"
 #include "sdp/sdp.h"
-
 // example node implementation details
 namespace impl
 {
@@ -168,15 +168,20 @@ namespace impl
         // video/smpte291
         const port mxl_data{ U("xd") };
 
+        // application/usb.
+        const port usb_data{ U("ud") };
+
         const std::vector<port> rtp{ video, audio, data, mux };
         const std::vector<port> ws{ temperature, burn, nonsense, catcall };
         const std::vector<port> mxl{ mxl_video, mxl_audio, mxl_data };
-        const std::vector<port> all{ boost::copy_range<std::vector<port>>(boost::join(boost::join(rtp, ws), mxl)) };
+        const std::vector<port> usb{ usb_data };
+        const std::vector<port> all{ boost::copy_range<std::vector<port>>(boost::join(boost::join(boost::join(rtp, ws), mxl), usb)) };
     }
 
     bool is_rtp_port(const port& port);
     bool is_ws_port(const port& port);
     bool is_mxl_port(const port& port);
+    bool is_usb_port(const port& port);
     std::vector<port> parse_ports(const web::json::value& value);
 
     const std::vector<nmos::channel> channels_repeat{
@@ -425,10 +430,13 @@ void node_implementation_init(nmos::node_model& model, nmos::experimental::contr
     const auto rtp_sender_ports = boost::copy_range<std::vector<impl::port>>(sender_ports | boost::adaptors::filtered(impl::is_rtp_port));
     const auto ws_sender_ports = boost::copy_range<std::vector<impl::port>>(sender_ports | boost::adaptors::filtered(impl::is_ws_port));
     const auto mxl_sender_ports = boost::copy_range<std::vector<impl::port>>(sender_ports | boost::adaptors::filtered(impl::is_mxl_port));
+    const auto usb_sender_ports = boost::copy_range<std::vector<impl::port>>(sender_ports | boost::adaptors::filtered(impl::is_usb_port));
     const auto receiver_ports = impl::parse_ports(impl::fields::receivers(model.settings));
     const auto rtp_receiver_ports = boost::copy_range<std::vector<impl::port>>(receiver_ports | boost::adaptors::filtered(impl::is_rtp_port));
     const auto ws_receiver_ports = boost::copy_range<std::vector<impl::port>>(receiver_ports | boost::adaptors::filtered(impl::is_ws_port));
     const auto mxl_receiver_ports = boost::copy_range<std::vector<impl::port>>(receiver_ports | boost::adaptors::filtered(impl::is_mxl_port));
+    const auto usb_receiver_ports = boost::copy_range<std::vector<impl::port>>(receiver_ports | boost::adaptors::filtered(impl::is_usb_port));
+
     const auto frame_rate = nmos::parse_rational(impl::fields::frame_rate(model.settings));
     const auto frame_width = impl::fields::frame_width(model.settings);
     const auto frame_height = impl::fields::frame_height(model.settings);
@@ -552,6 +560,7 @@ void node_implementation_init(nmos::node_model& model, nmos::experimental::contr
         auto sender_ids = impl::make_ids(seed_id, nmos::types::sender, rtp_sender_ports, how_many);
         if (0 <= nmos::fields::events_port(model.settings)) boost::range::push_back(sender_ids, impl::make_ids(seed_id, nmos::types::sender, ws_sender_ports, how_many));
         boost::range::push_back(sender_ids, impl::make_ids(seed_id, nmos::types::sender, mxl_sender_ports, how_many));
+        boost::range::push_back(sender_ids, impl::make_ids(seed_id, nmos::types::sender, usb_sender_ports, how_many));
         auto receiver_ids = impl::make_ids(seed_id, nmos::types::receiver, receiver_ports, how_many);
         auto device = nmos::make_device(device_id, node_id, sender_ids, receiver_ids, model.settings);
         device.data[nmos::fields::tags] = impl::fields::device_tags(model.settings);
@@ -1065,6 +1074,95 @@ void node_implementation_init(nmos::node_model& model, nmos::experimental::contr
             impl::insert_group_hint(receiver, port, index);
 
             auto connection_receiver = nmos::make_connection_mxl_receiver(receiver_id, mxl_domain_id);
+
+            resolve_auto(receiver, connection_receiver, connection_receiver.data[nmos::fields::endpoint_active][nmos::fields::transport_params]);
+
+            if (!insert_resource_after(delay_millis, model.node_resources, std::move(receiver), gate)) throw node_implementation_init_exception();
+            if (!insert_resource_after(delay_millis, model.connection_resources, std::move(connection_receiver), gate)) throw node_implementation_init_exception();
+        }
+    }
+
+     // example usb sources, flows and senders
+    for (int index = 0; index < how_many; ++index)
+    {
+        for (const auto& port : usb_sender_ports)
+        {
+            const auto source_id = impl::make_id(seed_id, nmos::types::source, port, index);
+            const auto flow_id = impl::make_id(seed_id, nmos::types::flow, port, index);
+            const auto sender_id = impl::make_id(seed_id, nmos::types::sender, port, index);
+
+            nmos::resource source;
+            if (impl::ports::usb_data == port)
+            {
+                source = nmos::make_data_source(source_id, device_id, nmos::clock_names::clk0, frame_rate, model.settings);
+            }
+            impl::insert_parents(source, seed_id, port, index);
+            impl::set_label_description(source, port, index);
+
+
+            nmos::resource flow;
+
+            if (impl::ports::usb_data == port)
+            {
+                flow = nmos::make_data_flow(flow_id, source_id, device_id, nmos::media_types::app_usb, model.settings);
+            }
+            impl::insert_parents(flow, seed_id, port, index);
+            impl::set_label_description(flow, port, index);
+            
+            // set_transportfile needs to find the matching source and flow for the sender, so insert these first
+            if (!insert_resource_after(delay_millis, model.node_resources, std::move(source), gate)) throw node_implementation_init_exception();
+            if (!insert_resource_after(delay_millis, model.node_resources, std::move(flow), gate)) throw node_implementation_init_exception();
+
+            const auto manifest_href = nmos::experimental::make_manifest_api_manifest(sender_id, model.settings);
+            auto sender = nmos::make_sender(sender_id, flow_id, nmos::transports::usb, device_id, manifest_href.to_string(), interface_names, model.settings);
+            impl::set_label_description(sender, port, index);
+            impl::insert_group_hint(sender, port, index);
+
+            auto connection_sender = nmos::make_connection_usb_sender(sender_id);
+            connection_sender.data[nmos::fields::endpoint_constraints][0][nmos::fields::usb_source_ip] = value_of({
+                { nmos::fields::constraint_enum, value_from_elements(primary_interface.addresses) }
+            });
+
+            if (impl::fields::activate_senders(model.settings))
+            {
+                // initialize this sender with a scheduled activation, e.g. to enable the IS-05-01 test suite to run immediately
+                auto& staged = connection_sender.data[nmos::fields::endpoint_staged];
+                staged[nmos::fields::master_enable] = value::boolean(true);
+                staged[nmos::fields::activation] = value_of({
+                    { nmos::fields::mode, nmos::activation_modes::activate_scheduled_relative.name },
+                    { nmos::fields::requested_time, U("0:0") },
+                    { nmos::fields::activation_time, nmos::make_version() }
+                });
+            }
+
+            resolve_auto(sender, connection_sender, connection_sender.data[nmos::fields::endpoint_active][nmos::fields::transport_params]);
+
+            if (!insert_resource_after(delay_millis, model.node_resources, std::move(sender), gate)) throw node_implementation_init_exception();
+            if (!insert_resource_after(delay_millis, model.connection_resources, std::move(connection_sender), gate)) throw node_implementation_init_exception();
+        }
+
+    }
+
+    // example usb receivers
+    for (int index = 0; index < how_many; ++index)
+    {
+        for (const auto& port : usb_receiver_ports)
+        {
+            const auto receiver_id = impl::make_id(seed_id, nmos::types::receiver, port, index);
+
+            nmos::resource receiver;
+            if (impl::ports::usb_data == port)
+            {
+                receiver = nmos::make_data_receiver(receiver_id, device_id, nmos::transports::usb, {},  nmos::media_types::app_usb , model.settings);
+                receiver.data[nmos::fields::version] = receiver.data[nmos::fields::caps][nmos::fields::version] = value(nmos::make_version());
+            }
+            impl::set_label_description(receiver, port, index);
+            impl::insert_group_hint(receiver, port, index);
+
+            auto connection_receiver = nmos::make_connection_usb_receiver(receiver_id);
+            connection_receiver.data[nmos::fields::endpoint_constraints][0][nmos::fields::usb_interface_ip] = value_of({
+                { nmos::fields::constraint_enum, value_from_elements(primary_interface.addresses) }
+            });
 
             resolve_auto(receiver, connection_receiver, connection_receiver.data[nmos::fields::endpoint_active][nmos::fields::transport_params]);
 
@@ -2068,6 +2166,8 @@ nmos::connection_resource_auto_resolver make_node_implementation_auto_resolver(c
     const auto ws_sender_ids = impl::make_ids(seed_id, nmos::types::sender, ws_sender_ports, how_many);
     const auto mxl_sender_ports = boost::copy_range<std::vector<impl::port>>(sender_ports | boost::adaptors::filtered(impl::is_mxl_port));
     const auto mxl_sender_ids = impl::make_ids(seed_id, nmos::types::sender, mxl_sender_ports, how_many);
+    const auto usb_sender_ports = boost::copy_range<std::vector<impl::port>>(sender_ports | boost::adaptors::filtered(impl::is_usb_port));
+    const auto usb_sender_ids = impl::make_ids(seed_id, nmos::types::sender, usb_sender_ports, how_many);
     const auto ws_sender_uri = nmos::make_events_ws_api_connection_uri(device_id, settings);
     const auto receiver_ports = impl::parse_ports(impl::fields::receivers(settings));
     const auto rtp_receiver_ports = boost::copy_range<std::vector<impl::port>>(receiver_ports | boost::adaptors::filtered(impl::is_rtp_port));
@@ -2076,10 +2176,12 @@ nmos::connection_resource_auto_resolver make_node_implementation_auto_resolver(c
     const auto ws_receiver_ids = impl::make_ids(seed_id, nmos::types::receiver, ws_receiver_ports, how_many);
     const auto mxl_receiver_ports = boost::copy_range<std::vector<impl::port>>(receiver_ports | boost::adaptors::filtered(impl::is_mxl_port));
     const auto mxl_receiver_ids = impl::make_ids(seed_id, nmos::types::receiver, mxl_receiver_ports, how_many);
+    const auto usb_receiver_ports = boost::copy_range<std::vector<impl::port>>(receiver_ports | boost::adaptors::filtered(impl::is_usb_port));
+    const auto usb_receiver_ids = impl::make_ids(seed_id, nmos::types::receiver, usb_receiver_ports, how_many);
 
     // although which properties may need to be defaulted depends on the resource type,
     // the default value will almost always be different for each resource
-    return [rtp_sender_ids, rtp_receiver_ids, ws_sender_ids, ws_sender_uri, ws_receiver_ids, mxl_sender_ids, mxl_receiver_ids](const nmos::resource& resource, const nmos::resource& connection_resource, value& transport_params)
+    return [rtp_sender_ids, rtp_receiver_ids, ws_sender_ids, ws_sender_uri, ws_receiver_ids, mxl_sender_ids, mxl_receiver_ids, usb_sender_ids, usb_receiver_ids](const nmos::resource& resource, const nmos::resource& connection_resource, value& transport_params)
     {
         const std::pair<nmos::id, nmos::type> id_type{ connection_resource.id, connection_resource.type };
         // this code relies on the specific constraints added by node_implementation_thread
@@ -2124,6 +2226,14 @@ nmos::connection_resource_auto_resolver make_node_implementation_auto_resolver(c
                 nmos::details::resolve_auto(transport_params[0], nmos::fields::mxl_flow_id, [&] { return web::json::front(nmos::fields::constraint_enum(constraints.at(0).at(nmos::fields::mxl_flow_id))); });
             }
         }
+        else if (usb_sender_ids.end() != boost::range::find(usb_sender_ids, id_type.first))
+        {
+            nmos::details::resolve_auto(transport_params[0], nmos::fields::usb_source_ip, [&] { return web::json::front(nmos::fields::constraint_enum(constraints.at(0).at(nmos::fields::usb_source_ip))); });
+            nmos::details::resolve_auto(transport_params[0], nmos::fields::usb_source_port, [&] { return 5004; });
+        }
+        else if (usb_receiver_ids.end() != boost::range::find(usb_receiver_ids, id_type.first)){
+            nmos::details::resolve_auto(transport_params[0], nmos::fields::usb_interface_ip, [&] { return web::json::front(nmos::fields::constraint_enum(constraints.at(0).at(nmos::fields::usb_interface_ip))); });
+        }
     };
 }
 
@@ -2140,9 +2250,11 @@ nmos::connection_sender_transportfile_setter make_node_implementation_transportf
     const auto rtp_source_ids = impl::make_ids(seed_id, nmos::types::source, rtp_sender_ports, how_many);
     const auto rtp_flow_ids = impl::make_ids(seed_id, nmos::types::flow, rtp_sender_ports, how_many);
     const auto rtp_sender_ids = impl::make_ids(seed_id, nmos::types::sender, rtp_sender_ports, how_many);
+    const auto usb_sender_ports = boost::copy_range<std::vector<impl::port>>(sender_ports | boost::adaptors::filtered(impl::is_usb_port));
+    const auto usb_sender_ids = impl::make_ids(seed_id, nmos::types::sender, usb_sender_ports, how_many);
 
     // as part of activation, the example sender /transportfile should be updated based on the active transport parameters
-    return [&node_resources, node_id, rtp_source_ids, rtp_flow_ids, rtp_sender_ids](const nmos::resource& sender, const nmos::resource& connection_sender, value& endpoint_transportfile)
+    return [&node_resources, node_id, rtp_source_ids, rtp_flow_ids, rtp_sender_ids, usb_sender_ids](const nmos::resource& sender, const nmos::resource& connection_sender, value& endpoint_transportfile)
     {
         const auto found = boost::range::find(rtp_sender_ids, connection_sender.id);
         if (rtp_sender_ids.end() != found)
@@ -2213,6 +2325,23 @@ nmos::connection_sender_transportfile_setter make_node_implementation_transportf
             auto session_description = nmos::make_session_description(sdp_params, transport_params);
             auto sdp = utility::s2us(sdp::make_session_description(session_description));
             endpoint_transportfile = nmos::make_connection_rtp_sender_transportfile(sdp);
+        }
+
+        const auto found_usb = boost::range::find(usb_sender_ids, connection_sender.id);
+        if (usb_sender_ids.end() != found_usb)
+        {
+            auto sdp = R"(v=0
+o=- 1730740959 1730740959 IN IP4 10.10.70.76
+s=Device USB data stream 0
+t=0 0
+m=application 5004 TCP usb
+c=IN IP4 10.10.70.76
+a=ts-refclk:ptp=IEEE1588-2008:39-A7-94-FF-FE-07-CB-D0:00
+a=mediaclk:direct=0
+a=privacy:protocol=USB_KV; mode=AES-128-CTR_CMAC-64-AAD;
+iv=e06d9bcdb3eb4e5e; key_generator=3318ce76a8858bee4176030390185dd8; key_version=e2cb4299; key_id=0001020304050607
+a=setup:passive)";
+            endpoint_transportfile = nmos::make_connection_rtp_sender_transportfile(utility::s2us(sdp));
         }
     };
 }
@@ -2460,6 +2589,11 @@ namespace impl
     bool is_mxl_port(const impl::port& port)
     {
         return impl::ports::mxl.end() != boost::range::find(impl::ports::mxl, port);
+    }
+
+    bool is_usb_port(const impl::port& port)
+    {
+        return impl::ports::usb.end() != boost::range::find(impl::ports::usb, port);
     }
 
     std::vector<port> parse_ports(const web::json::value& value)

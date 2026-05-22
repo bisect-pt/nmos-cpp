@@ -63,6 +63,9 @@ namespace nmos
 
     nmos::resource make_connection_mxl_sender(const nmos::id& id, const nmos::id& mxl_domain_id, const nmos::id& mxl_flow_id);
     nmos::resource make_connection_mxl_receiver(const nmos::id& id, const nmos::id& mxl_domain_id);
+
+    nmos::resource make_connection_usb_sender(const nmos::id& id);
+    nmos::resource make_connection_usb_receiver(const nmos::id& id);
 }
 
 #endif
