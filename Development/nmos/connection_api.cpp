@@ -85,7 +85,7 @@ namespace nmos
                 nmos::is05_versions::v1_0, { nmos::transports::rtp }
             },
             {
-                nmos::is05_versions::v1_1, { nmos::transports::websocket, nmos::transports::mqtt }
+                nmos::is05_versions::v1_1, { nmos::transports::websocket, nmos::transports::mqtt, nmos::transports::usb }
             },
             {
                 nmos::is05_versions::v1_2, { nmos::transports::mxl }
@@ -259,6 +259,31 @@ namespace nmos
             return auto_constraints;
         }
 
+        static const std::map<nmos::type, std::set<utility::string_t>>& usb_auto_constraints()
+        {
+            // These are the constraints that support "auto" in /staged
+            // BCP-007-02: NMOS Support for IPMX/USB.
+            // See https://specs.amwa.tv/bcp-007-02/
+            static const std::map<nmos::type, std::set<utility::string_t>> auto_constraints
+            {
+                {
+                    nmos::types::sender,
+                    {
+                        nmos::fields::usb_source_ip,
+                        nmos::fields::usb_source_port
+                    }
+                },
+                {
+                    nmos::types::receiver,
+                    {
+                        nmos::fields::usb_interface_ip
+                    }
+                }
+            };
+            return auto_constraints;
+        }
+
+
         static const std::map<nmos::type, std::set<utility::string_t>>& mxl_auto_constraints()
         {
             // These are the constraints that support "auto" in /staged
@@ -314,6 +339,7 @@ namespace nmos
             if (nmos::transports::websocket == transport_base) return websocket_auto_constraints();
             if (nmos::transports::mqtt == transport_base) return mqtt_auto_constraints();
             if (nmos::transports::mxl == transport_base) return mxl_auto_constraints();
+            if (nmos::transports::usb == transport_base) return usb_auto_constraints();
 
             static const std::map<nmos::type, std::set<utility::string_t>> no_auto_constraints
             {
@@ -607,6 +633,11 @@ namespace nmos
                             // Merge the transport file into the transport parameters
 
                             auto& transport_params = nmos::fields::transport_params(merged);
+
+                            slog::log<slog::severities::error>(gate, SLOG_FLF) << "transport_file_params" << transport_file_params.serialize();
+
+                            slog::log<slog::severities::error>(gate, SLOG_FLF) << "transport_params" << transport_params.serialize();
+
 
                             web::json::merge_patch(transport_params, transport_file_params);
                         }
