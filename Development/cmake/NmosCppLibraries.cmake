@@ -466,6 +466,7 @@ set(NMOS_IS05_V1_1_SCHEMAS_JSON
     third_party/is-05/${NMOS_IS05_V1_1_TAG}/APIs/schemas/constraints-schema-mqtt.json
     third_party/is-05/${NMOS_IS05_V1_1_TAG}/APIs/schemas/constraints-schema-rtp.json
     third_party/is-05/${NMOS_IS05_V1_1_TAG}/APIs/schemas/constraints-schema-websocket.json
+    third_party/is-05/${NMOS_IS05_V1_1_TAG}/APIs/schemas/constraints-schema-usb.json
     third_party/is-05/${NMOS_IS05_V1_1_TAG}/APIs/schemas/constraints-schema.json
     third_party/is-05/${NMOS_IS05_V1_1_TAG}/APIs/schemas/error.json
     third_party/is-05/${NMOS_IS05_V1_1_TAG}/APIs/schemas/receiver_transport_params.json
@@ -474,6 +475,7 @@ set(NMOS_IS05_V1_1_SCHEMAS_JSON
     third_party/is-05/${NMOS_IS05_V1_1_TAG}/APIs/schemas/receiver_transport_params_mqtt.json
     third_party/is-05/${NMOS_IS05_V1_1_TAG}/APIs/schemas/receiver_transport_params_rtp.json
     third_party/is-05/${NMOS_IS05_V1_1_TAG}/APIs/schemas/receiver_transport_params_websocket.json
+    third_party/is-05/${NMOS_IS05_V1_1_TAG}/APIs/schemas/receiver_transport_params_usb.json
     third_party/is-05/${NMOS_IS05_V1_1_TAG}/APIs/schemas/receiver-response-schema.json
     third_party/is-05/${NMOS_IS05_V1_1_TAG}/APIs/schemas/receiver-stage-schema.json
     third_party/is-05/${NMOS_IS05_V1_1_TAG}/APIs/schemas/receiver-transport-file.json
@@ -483,6 +485,7 @@ set(NMOS_IS05_V1_1_SCHEMAS_JSON
     third_party/is-05/${NMOS_IS05_V1_1_TAG}/APIs/schemas/sender_transport_params_mqtt.json
     third_party/is-05/${NMOS_IS05_V1_1_TAG}/APIs/schemas/sender_transport_params_rtp.json
     third_party/is-05/${NMOS_IS05_V1_1_TAG}/APIs/schemas/sender_transport_params_websocket.json
+    third_party/is-05/${NMOS_IS05_V1_1_TAG}/APIs/schemas/sender_transport_params_usb.json
     third_party/is-05/${NMOS_IS05_V1_1_TAG}/APIs/schemas/sender-receiver-base.json
     third_party/is-05/${NMOS_IS05_V1_1_TAG}/APIs/schemas/sender-response-schema.json
     third_party/is-05/${NMOS_IS05_V1_1_TAG}/APIs/schemas/sender-stage-schema.json
