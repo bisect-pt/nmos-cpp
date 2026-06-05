@@ -173,6 +173,11 @@ namespace nmos
         const web::json::field_as_value_or broker_topic{ U("broker_topic"), {} }; // string or null
         const web::json::field_as_value_or connection_status_broker_topic{ U("connection_status_broker_topic"), {} }; // string or null
 
+         // for urn:x-nmos:transport:usb (see AMWA BCP-007-02 NMOS with IPMX/USB)
+        const web::json::field_as_value_or usb_source_ip{ U("source_ip"), {} }; // senders: string or auto; receiver: string or null
+        const web::json::field_as_value_or usb_source_port{ U("source_port"), {} }; // senders: integer or auto; receivers: integer or null
+        const web::json::field_as_value_or usb_interface_ip{ U("interface_ip"), {} }; // receivers: string or auto
+
         // IS-07 Event & Tally
 
         // for events_api

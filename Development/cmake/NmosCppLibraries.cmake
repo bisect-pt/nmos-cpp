@@ -1219,6 +1219,7 @@ set(NMOS_CPP_NMOS_HEADERS
     nmos/transfer_characteristic.h
     nmos/transport.h
     nmos/type.h
+    nmos/usb.h
     nmos/version.h
     nmos/video_jxsv.h
     nmos/vpid_code.h

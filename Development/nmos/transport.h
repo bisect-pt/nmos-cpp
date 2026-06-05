@@ -21,6 +21,8 @@ namespace nmos
 
         const transport mqtt{ U("urn:x-nmos:transport:mqtt") };
         const transport websocket{ U("urn:x-nmos:transport:websocket") };
+
+        const transport usb{ U("urn:x-nmos:transport:usb") };
     }
 
     // "Subclassifications are defined as the portion of the URN which follows the first occurrence of a '.', but prior to any '/' character."

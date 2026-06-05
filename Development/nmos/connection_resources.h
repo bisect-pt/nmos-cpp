@@ -60,6 +60,12 @@ namespace nmos
 
     utility::string_t make_events_mqtt_broker_topic(const nmos::id& source_id, const nmos::settings& settings);
     utility::string_t make_events_mqtt_connection_status_broker_topic(const nmos::id& connection_id, const nmos::settings& settings);
+
+    web::json::value make_connection_usb_sender_transportfile(const utility::string_t& transportfile);
+
+    nmos::resource make_connection_usb_sender(const nmos::id& id);
+
+    nmos::resource make_connection_usb_receiver(const nmos::id& id);
 }
 
 #endif
