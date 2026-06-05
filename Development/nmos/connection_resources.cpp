@@ -783,6 +783,56 @@ namespace nmos
 
     namespace details
     {
+        web::json::value make_connection_usb_sender_core_constraints()
+        {
+            using web::json::value;
+            using web::json::value_of;
+
+            const auto unconstrained = value::object();
+
+            return value_of({
+                { nmos::fields::usb_source_ip, unconstrained },
+                { nmos::fields::usb_source_port, unconstrained },
+            });
+        }
+
+        web::json::value make_connection_usb_sender_staged_core_parameter_set()
+        {
+            using web::json::value;
+            using web::json::value_of;
+
+            return value_of({
+                { nmos::fields::usb_source_ip, U("auto") },
+                { nmos::fields::usb_source_port, U("auto") }
+            });
+        }
+
+        web::json::value make_connection_usb_receiver_core_constraints()
+        {
+            using web::json::value;
+            using web::json::value_of;
+
+            const auto unconstrained = value::object();
+            
+            return value_of({
+                { nmos::fields::usb_source_ip, unconstrained },
+                { nmos::fields::usb_source_port, unconstrained },
+                { nmos::fields::usb_interface_ip, unconstrained },
+            });
+        }
+
+        web::json::value make_connection_usb_receiver_staged_core_parameter_set()
+        {
+            using web::json::value;
+            using web::json::value_of;
+
+            return value_of({
+                { nmos::fields::usb_source_ip, value::null() },
+                { nmos::fields::usb_source_port, value::null() },
+                { nmos::fields::usb_interface_ip, U("auto") }
+            });
+        }
+
         web::json::value make_connection_mxl_sender_core_constraints(const nmos::id& mxl_domain_id, const nmos::id& mxl_flow_id)
         {
             using web::json::value;
@@ -840,6 +890,60 @@ namespace nmos
                 { nmos::fields::mxl_flow_id, value::null() }
             });
         }
+    }
+
+     web::json::value make_connection_usb_sender_transportfile(const utility::string_t& transportfile)
+    {
+        using web::json::value;
+        using web::json::value_of;
+
+        return value_of({
+            { nmos::fields::transportfile_data, transportfile },
+            { nmos::fields::transportfile_type, nmos::media_types::application_sdp.name }
+        });
+    }
+
+    nmos::resource make_connection_usb_sender(const nmos::id& id)
+    {
+        using web::json::value;
+        using web::json::value_of;
+
+        const auto redundant = false;
+
+        auto data = details::make_connection_resource_core(id, redundant);
+
+        data[nmos::fields::endpoint_constraints] = details::legs_of(details::make_connection_usb_sender_core_constraints(), redundant);
+
+        data[nmos::fields::endpoint_staged][nmos::fields::receiver_id] = value::null();
+        data[nmos::fields::endpoint_staged][nmos::fields::transport_params] = details::legs_of(details::make_connection_usb_sender_staged_core_parameter_set(), redundant);
+
+        data[nmos::fields::endpoint_active] = data[nmos::fields::endpoint_staged];
+        // The caller must resolve all instances of "auto" in the /active endpoint into the actual values that will be used!
+
+        // Note that the transporttype endpoint is implemented in terms of the matching IS-04 sender
+
+        return{ is05_versions::v1_1, types::sender, std::move(data), false };
+    }
+
+    nmos::resource make_connection_usb_receiver(const nmos::id& id)
+    {
+        using web::json::value;
+
+        const auto redundant = false;
+
+        auto data = details::make_connection_resource_core(id, redundant);
+
+        data[nmos::fields::endpoint_constraints] = details::legs_of(details::make_connection_usb_receiver_core_constraints(), redundant);
+
+        data[nmos::fields::endpoint_staged][nmos::fields::sender_id] = value::null();
+        data[nmos::fields::endpoint_staged][nmos::fields::transport_file] = details::make_connection_receiver_staging_transport_file();
+        data[nmos::fields::endpoint_staged][nmos::fields::transport_params] = details::legs_of(details::make_connection_usb_receiver_staged_core_parameter_set(), redundant);
+
+        data[nmos::fields::endpoint_active] = data[nmos::fields::endpoint_staged];
+
+        // Note that the transporttype endpoint is implemented in terms of the matching IS-04 receiver
+
+        return{ is05_versions::v1_1, types::receiver, std::move(data), false };
     }
 
     nmos::resource make_connection_mxl_sender(const nmos::id& id, const nmos::id& mxl_domain_id, const nmos::id& mxl_flow_id)

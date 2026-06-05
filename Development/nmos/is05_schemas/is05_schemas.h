@@ -39,6 +39,7 @@ namespace nmos
             extern const char* sender_transport_params_dash;
             extern const char* sender_transport_params_websocket;
             extern const char* sender_transport_params_mqtt;
+            extern const char* sender_transport_params_usb;
             extern const char* sender_transport_params_ext;
             extern const char* receiver_stage_schema;
             extern const char* receiver_transport_file;
@@ -47,6 +48,7 @@ namespace nmos
             extern const char* receiver_transport_params_dash;
             extern const char* receiver_transport_params_websocket;
             extern const char* receiver_transport_params_mqtt;
+            extern const char* receiver_transport_params_usb;
             extern const char* receiver_transport_params_ext;
         }
 
