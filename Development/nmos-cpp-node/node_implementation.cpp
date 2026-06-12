@@ -53,6 +53,7 @@
 #include "nmos/usb.h"
 #include "nmos/video_jxsv.h"
 #include "sdp/sdp.h"
+#include "nmos/usb_sdp_utils.h"
 
 // example node implementation details
 namespace impl
@@ -983,7 +984,7 @@ void node_implementation_init(nmos::node_model& model, nmos::experimental::contr
             nmos::resource receiver;
             if (impl::ports::usb_data == port)
             {
-                receiver = nmos::make_data_receiver(receiver_id, device_id, nmos::transports::usb, {},  nmos::media_types::app_usb , model.settings);
+                receiver = nmos::make_receiver(receiver_id, device_id, nmos::transports::usb, {},  nmos::formats::data, {nmos::media_types::app_usb} , model.settings);
                 receiver.data[nmos::fields::version] = receiver.data[nmos::fields::caps][nmos::fields::version] = value(nmos::make_version());
             }
             impl::set_label_description(receiver, port, index);
@@ -1941,81 +1942,6 @@ nmos::registration_handler make_node_implementation_registration_handler(slog::b
     };
 }
 
-namespace {
-    web::json::value parse_usb_transport_file(const nmos::resource& receiver, const nmos::resource& connection_receiver, const utility::string_t& transport_file_data, slog::base_gate& gate)
-    {
-        // Just to prove it works
-        // TODO: Validade SDP and
-        // get transport params from transport file data
-       
-        web::json::value transport_params = web::json::value::array();
-
-        web::json::value obj = web::json::value::object();
-
-        obj[U("source_ip")] = web::json::value::string(U("127.0.0.1"));
-        obj[U("source_port")] = web::json::value::number(5008);
-
-        web::json::push_back(transport_params, obj);
-
-        return transport_params;
-    }
-
-    bool is_usb(const utility::string_t& transport_file_data)
-    {
-        const auto session_description = sdp::parse_session_description(utility::us2s(transport_file_data));
-
-        if (!session_description.has_field(U("media_descriptions")))
-        {
-            return false;
-        }
-
-        const auto& media_descriptions = session_description.at(U("media_descriptions")).as_array();
-
-        for (const auto& desc : media_descriptions)
-        {
-            if (!desc.has_field(U("media")))
-            {
-                continue;
-            }
-
-            const auto& media = desc.at(U("media"));
-
-            std::string protocol;
-            std::vector<std::string> formats;
-
-            if (media.has_field(U("protocol")))
-            {
-                protocol = utility::conversions::to_utf8string(
-                    media.at(U("protocol")).as_string());
-            }
-
-            if (media.has_field(U("formats")))
-            {
-                for (const auto& fmt : media.at(U("formats")).as_array())
-                {
-                    formats.push_back(
-                        utility::conversions::to_utf8string(
-                            fmt.as_string()));
-                }
-            }
-
-            bool is_tcp = (protocol == "TCP");
-            bool has_usb = std::find(
-                formats.begin(),
-                formats.end(),
-                "usb") != formats.end();
-
-            if(is_tcp && has_usb)
-            {
-               return true;
-            }
-            return false;
-        }
-        return false;
-    }
-    
-}
-
 // Example Connection API callback to parse "transport_file" during a PATCH /staged request
 nmos::transport_file_parser make_node_implementation_transport_file_parser()
 {
@@ -2024,12 +1950,38 @@ nmos::transport_file_parser make_node_implementation_transport_file_parser()
     // (if this callback is specified, an 'empty' std::function is not allowed)
     return [](const nmos::resource& receiver, const nmos::resource& connection_receiver, const utility::string_t& transport_file_type, const utility::string_t& transport_file_data, slog::base_gate& gate)
     {
-        if(is_usb(transport_file_data))
+        // ── USB path ────────────────────────────────────────────────────
+        if (nmos::is_usb_transport_file(transport_file_data))
         {
-            slog::log<slog::severities::info>(gate, SLOG_FLF) << nmos::stash_category(impl::categories::node_implementation) << "Transport TCP, format USB.";
-            return parse_usb_transport_file(receiver, connection_receiver, transport_file_data, gate);
+            slog::log<slog::severities::info>(gate, SLOG_FLF) << "Transport file: USB/TCP stream detected, parsing as BCP-007-02";
+
+            // 1. Extract USB params + IS-05 transport parameters
+            auto sdp_transport_params = nmos::parse_usb_transport_file(transport_file_data);
+
+            // 2. Validate against receiver capabilities.
+            //    USB receivers only need application/usb in caps.media_types;
+            //    there are no fmtp parameters to match.
+            const auto& receiver_data = receiver.data;
+            const auto& caps = nmos::fields::caps(receiver_data);
+            const auto& media_types_or_null = nmos::fields::media_types(caps);
+            if (!media_types_or_null.is_null())
+            {
+                const auto& media_types = media_types_or_null.as_array();
+                const auto found = std::find(media_types.begin(), media_types.end(), web::json::value::string(U("application/usb")));
+                if (media_types.end() == found)
+                    throw std::runtime_error("receiver does not support application/usb");
+            }
+
+            // 3. Log privacy info if present (do NOT log keys in production!)
+            if (!sdp_transport_params.first.privacy.empty())
+            {
+                slog::log<slog::severities::info>(gate, SLOG_FLF) << "USB stream has privacy encryption (a=privacy present)";
+            }
+
+            return sdp_transport_params.second;
         }
 
+        // ── RTP path ────────────────────────────────────────────────────
         const auto validate_sdp_parameters = [](const web::json::value& receiver, const nmos::sdp_parameters& sdp_params)
         {
             if (nmos::media_types::video_jxsv == nmos::get_media_type(sdp_params))

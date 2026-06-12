@@ -544,11 +544,6 @@ namespace nmos
 
                             auto& transport_params = nmos::fields::transport_params(merged);
 
-                            slog::log<slog::severities::error>(gate, SLOG_FLF) << "transport_file_params" << transport_file_params.serialize();
-
-                            slog::log<slog::severities::error>(gate, SLOG_FLF) << "transport_params" << transport_params.serialize();
-
-
                             web::json::merge_patch(transport_params, transport_file_params);
                         }
                         catch (const web::json::json_exception& e)
