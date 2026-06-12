@@ -1120,6 +1120,7 @@ set(NMOS_CPP_NMOS_SOURCES
     nmos/schemas_api.cpp
     nmos/sdp_attributes.cpp
     nmos/sdp_utils.cpp
+    nmos/usb_sdp_utils.cpp
     nmos/server.cpp
     nmos/server_utils.cpp
     nmos/settings.cpp
@@ -1265,6 +1266,7 @@ set(NMOS_CPP_NMOS_HEADERS
     nmos/transport.h
     nmos/type.h
     nmos/usb.h
+    nmos/usb_sdp_utils.h
     nmos/version.h
     nmos/video_jxsv.h
     nmos/vpid_code.h
