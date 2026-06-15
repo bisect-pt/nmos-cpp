@@ -976,9 +976,13 @@ void node_implementation_init(nmos::node_model& model, nmos::experimental::contr
             impl::set_label_description(sender, port, index);
             impl::insert_group_hint(sender, port, index);
 
-            auto connection_sender = nmos::make_connection_usb_sender(sender_id);
+            auto connection_sender = nmos::make_connection_usb_sender(sender_id, smpte2022_7);
             connection_sender.data[nmos::fields::endpoint_constraints][0][nmos::fields::usb_source_ip] = value_of({
                 { nmos::fields::constraint_enum, value_from_elements(primary_interface.addresses) }
+            });
+
+            if (smpte2022_7) connection_sender.data[nmos::fields::endpoint_constraints][1][nmos::fields::usb_source_ip] = value_of({
+                { nmos::fields::constraint_enum, value_from_elements(secondary_interface.addresses) }
             });
 
             if (impl::fields::activate_senders(model.settings))
@@ -1017,9 +1021,13 @@ void node_implementation_init(nmos::node_model& model, nmos::experimental::contr
             impl::set_label_description(receiver, port, index);
             impl::insert_group_hint(receiver, port, index);
 
-            auto connection_receiver = nmos::make_connection_usb_receiver(receiver_id);
+            auto connection_receiver = nmos::make_connection_usb_receiver(receiver_id, smpte2022_7);
             connection_receiver.data[nmos::fields::endpoint_constraints][0][nmos::fields::usb_interface_ip] = value_of({
                 { nmos::fields::constraint_enum, value_from_elements(primary_interface.addresses) }
+            });
+
+            if (smpte2022_7) connection_receiver.data[nmos::fields::endpoint_constraints][1][nmos::fields::usb_interface_ip] = value_of({
+                { nmos::fields::constraint_enum, value_from_elements(secondary_interface.addresses) }
             });
 
             resolve_auto(receiver, connection_receiver, connection_receiver.data[nmos::fields::endpoint_active][nmos::fields::transport_params]);
@@ -2264,11 +2272,18 @@ nmos::connection_resource_auto_resolver make_node_implementation_auto_resolver(c
         }
         else if (usb_sender_ids.end() != boost::range::find(usb_sender_ids, id_type.first))
         {
+            const bool smpte2022_7 = 1 < transport_params.size();
             nmos::details::resolve_auto(transport_params[0], nmos::fields::usb_source_ip, [&] { return web::json::front(nmos::fields::constraint_enum(constraints.at(0).at(nmos::fields::usb_source_ip))); });
+            if (smpte2022_7) nmos::details::resolve_auto(transport_params[1], nmos::fields::usb_source_ip, [&] { return web::json::back(nmos::fields::constraint_enum(constraints.at(1).at(nmos::fields::usb_source_ip))); });
             nmos::details::resolve_auto(transport_params[0], nmos::fields::usb_source_port, [&] { return 5004; });
+            if (smpte2022_7)
+            nmos::details::resolve_auto(transport_params[1], nmos::fields::usb_source_port, [&] { return 5004; });
         }
         else if (usb_receiver_ids.end() != boost::range::find(usb_receiver_ids, id_type.first)){
+            const bool smpte2022_7 = 1 < transport_params.size();
             nmos::details::resolve_auto(transport_params[0], nmos::fields::usb_interface_ip, [&] { return web::json::front(nmos::fields::constraint_enum(constraints.at(0).at(nmos::fields::usb_interface_ip))); });
+            if (smpte2022_7)
+            nmos::details::resolve_auto(transport_params[1], nmos::fields::usb_interface_ip, [&] { return web::json::front(nmos::fields::constraint_enum(constraints.at(1).at(nmos::fields::usb_interface_ip))); });
         }
     };
 }
@@ -2295,7 +2310,11 @@ nmos::connection_sender_transportfile_setter make_node_implementation_transportf
         const auto found_usb = boost::range::find(usb_sender_ids, connection_sender.id);
         if (usb_sender_ids.end() != found_usb)
         {
-            auto sdp = R"(v=0
+            const auto& active = nmos::fields::endpoint_active(connection_sender.data);
+            const auto& transport_params = nmos::fields::transport_params(active);
+            const size_t leg_count = transport_params.size();
+
+            auto single_leg_sdp = R"(v=0
 o=- 1730740959 1730740959 IN IP4 10.10.70.76
 s=Device USB data stream 0
 t=0 0
@@ -2305,11 +2324,30 @@ a=ts-refclk:ptp=IEEE1588-2008:39-A7-94-FF-FE-07-CB-D0:00
 a=mediaclk:direct=0
 a=privacy:protocol=USB_KV; mode=AES-128-CTR_CMAC-64-AAD; iv=e06d9bcdb3eb4e5e; key_generator=3318ce76a8858bee4176030390185dd8; key_version=e2cb4299; key_id=0001020304050607
 a=setup:passive)";
+
+            auto two_leg_sdp = R"(v=0
+o=- 1730740959 1730740959 IN IP4 10.10.70.76
+s=Device USB data stream 0
+t=0 0
+m=application 5004 TCP usb
+c=IN IP4 10.10.70.76
+a=ts-refclk:ptp=IEEE1588-2008:39-A7-94-FF-FE-07-CB-D0:00
+a=mediaclk:direct=0
+a=privacy:protocol=USB_KV; mode=AES-128-CTR_CMAC-64-AAD; iv=e06d9bcdb3eb4e5e; key_generator=3318ce76a8858bee4176030390185dd8; key_version=e2cb4299; key_id=0001020304050607
+a=setup:passive
+m=application 5004 TCP usb
+c=IN IP4 10.10.70.76
+a=ts-refclk:ptp=IEEE1588-2008:39-A7-94-FF-FE-07-CB-D0:00
+a=mediaclk:direct=0
+a=privacy:protocol=USB_KV; mode=AES-128-CTR_CMAC-64-AAD; iv=e06d9bcdb3eb4e5e; key_generator=3318ce76a8858bee4176030390185dd8; key_version=e2cb4299; key_id=0001020304050607
+a=setup:passive)";
+
+            const auto sdp = (leg_count >= 2) ? two_leg_sdp : single_leg_sdp;
+
             endpoint_transportfile = nmos::make_connection_usb_sender_transportfile(utility::s2us(sdp));
             
             return;
-        }
-         
+        }         
 
         const auto found = boost::range::find(rtp_sender_ids, connection_sender.id);
         if (rtp_sender_ids.end() != found)
