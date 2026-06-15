@@ -63,9 +63,9 @@ namespace nmos
 
     web::json::value make_connection_usb_sender_transportfile(const utility::string_t& transportfile);
 
-    nmos::resource make_connection_usb_sender(const nmos::id& id);
+    nmos::resource make_connection_usb_sender(const nmos::id& id, bool redundant);
 
-    nmos::resource make_connection_usb_receiver(const nmos::id& id);
+    nmos::resource make_connection_usb_receiver(const nmos::id& id, bool redundant);
 }
 
 #endif
