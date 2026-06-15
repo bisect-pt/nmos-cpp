@@ -735,12 +735,10 @@ namespace nmos
         });
     }
 
-    nmos::resource make_connection_usb_sender(const nmos::id& id)
+    nmos::resource make_connection_usb_sender(const nmos::id& id, bool redundant)
     {
         using web::json::value;
         using web::json::value_of;
-
-        const auto redundant = false;
 
         auto data = details::make_connection_resource_core(id, redundant);
 
@@ -757,11 +755,9 @@ namespace nmos
         return{ is05_versions::v1_1, types::sender, std::move(data), false };
     }
 
-    nmos::resource make_connection_usb_receiver(const nmos::id& id)
+    nmos::resource make_connection_usb_receiver(const nmos::id& id, bool redundant)
     {
         using web::json::value;
-
-        const auto redundant = false;
 
         auto data = details::make_connection_resource_core(id, redundant);
 
