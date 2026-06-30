@@ -1,13 +1,26 @@
 #include "nmos/usb_sdp_utils.h"
 #include "nmos/json_fields.h"
 #include "sdp/sdp.h"
-
 namespace nmos
 {
     bool is_usb_transport_file(const utility::string_t& transport_file_data)
     {
         return transport_file_data.find(U("TCP usb")) != utility::string_t::npos ||
                transport_file_data.find(U("TCP/usb")) != utility::string_t::npos;
+    }
+
+    bst::optional<sdp_parameters::ts_refclk_t> parse_ts_refclk(const web::json::value& attr)
+    {
+        const auto& tsval = sdp::fields::value(attr);
+        const sdp::ts_refclk_source clock_source{ sdp::fields::clock_source(tsval) };
+        if (sdp::ts_refclk_sources::ptp == clock_source)
+            return sdp_parameters::ts_refclk_t::ptp(
+                sdp::ptp_version{ sdp::fields::ptp_version(tsval) },
+                sdp::fields::ptp_server(tsval));
+        if (sdp::ts_refclk_sources::local_mac == clock_source)
+            return sdp_parameters::ts_refclk_t::local_mac(
+                sdp::fields::mac_address(tsval));
+        return bst::nullopt;
     }
 
     std::pair<usb_sdp_parameters, web::json::value>
@@ -91,27 +104,19 @@ namespace nmos
             auto& media_attributes = sdp::fields::attributes(md).as_array();
 
             // a=ts-refclk (fall back to session-level)
-            usb_params.ts_refclk.push_back([&]() -> sdp_parameters::ts_refclk_t
+            const auto has_ts_refclk = [](const web::json::array& attrs) {
+                return attrs.end() != sdp::find_name(attrs, sdp::attributes::ts_refclk);
+            };
+
+            // leg-level attributes win; fall back to session-level only if the leg has none
+            const auto& source = has_ts_refclk(media_attributes) ? media_attributes : session_attributes;
+
+            for (const auto& attr : source)
             {
-                auto ts_it = sdp::find_name(media_attributes, sdp::attributes::ts_refclk);
-                if (media_attributes.end() == ts_it)
-                {
-                    ts_it = sdp::find_name(session_attributes, sdp::attributes::ts_refclk);
-                    if (session_attributes.end() == ts_it)
-                        return {};
-                }
-                const auto& tsval = sdp::fields::value(*ts_it);
-                sdp::ts_refclk_source clock_source{ sdp::fields::clock_source(tsval) };
-                if (sdp::ts_refclk_sources::ptp == clock_source)
-                    return sdp_parameters::ts_refclk_t::ptp(
-                        sdp::ptp_version{ sdp::fields::ptp_version(tsval) },
-                        sdp::fields::ptp_server(tsval));
-                else if (sdp::ts_refclk_sources::local_mac == clock_source)
-                    return sdp_parameters::ts_refclk_t::local_mac(
-                        sdp::fields::mac_address(tsval));
-                else
-                    return {};
-            }());
+                if (sdp::fields::name(attr) != sdp::attributes::ts_refclk) continue;
+                if (auto clk = parse_ts_refclk(attr))
+                    usb_params.ts_refclk.push_back(std::move(*clk));
+            }
 
             if (!usb_params.mediaclk)
             {
