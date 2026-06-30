@@ -10,6 +10,7 @@
 #include <boost/range/algorithm_ext/push_back.hpp>
 #include <boost/range/irange.hpp>
 #include <boost/range/join.hpp>
+#include <boost/format.hpp>
 #include "pplx/pplx_utils.h" // for pplx::complete_after, etc.
 #include "cpprest/host_utils.h"
 #include "cpprest/json_validator.h"
@@ -2311,38 +2312,67 @@ nmos::connection_sender_transportfile_setter make_node_implementation_transportf
         if (usb_sender_ids.end() != found_usb)
         {
             const auto& active = nmos::fields::endpoint_active(connection_sender.data);
-            const auto& transport_params = nmos::fields::transport_params(active);
+            auto& transport_params = nmos::fields::transport_params(active);
             const size_t leg_count = transport_params.size();
 
+            // %1% = interface_p, %2% = port_p
             auto single_leg_sdp = R"(v=0
-o=- 1730740959 1730740959 IN IP4 10.10.70.76
+o=- 1730740959 1730740959 IN IP4 %1%
 s=Device USB data stream 0
 t=0 0
-m=application 5004 TCP usb
-c=IN IP4 10.10.70.76
+m=application %2% TCP usb
+c=IN IP4 %1%
 a=ts-refclk:ptp=IEEE1588-2008:39-A7-94-FF-FE-07-CB-D0:00
 a=mediaclk:direct=0
 a=privacy:protocol=USB_KV; mode=AES-128-CTR_CMAC-64-AAD; iv=e06d9bcdb3eb4e5e; key_generator=3318ce76a8858bee4176030390185dd8; key_version=e2cb4299; key_id=0001020304050607
 a=setup:passive)";
 
+ // %1% = interface_p, %2% = port_p, %3% = port_s, %4% = interface_s
             auto two_leg_sdp = R"(v=0
-o=- 1730740959 1730740959 IN IP4 10.10.70.76
+o=- 1730740959 1730740959 IN IP4 %1%
 s=Device USB data stream 0
 t=0 0
-m=application 5004 TCP usb
-c=IN IP4 10.10.70.76
+m=application %2% TCP usb
+c=IN IP4 %1%
 a=ts-refclk:ptp=IEEE1588-2008:39-A7-94-FF-FE-07-CB-D0:00
 a=mediaclk:direct=0
 a=privacy:protocol=USB_KV; mode=AES-128-CTR_CMAC-64-AAD; iv=e06d9bcdb3eb4e5e; key_generator=3318ce76a8858bee4176030390185dd8; key_version=e2cb4299; key_id=0001020304050607
 a=setup:passive
-m=application 5004 TCP usb
-c=IN IP4 10.10.70.76
+m=application %3% TCP usb
+c=IN IP4 %4%
 a=ts-refclk:ptp=IEEE1588-2008:39-A7-94-FF-FE-07-CB-D0:00
 a=mediaclk:direct=0
 a=privacy:protocol=USB_KV; mode=AES-128-CTR_CMAC-64-AAD; iv=e06d9bcdb3eb4e5e; key_generator=3318ce76a8858bee4176030390185dd8; key_version=e2cb4299; key_id=0001020304050607
 a=setup:passive)";
 
-            const auto sdp = (leg_count >= 2) ? two_leg_sdp : single_leg_sdp;
+
+            const auto source_ip_p = utility::us2s(transport_params.at(0).at(nmos::fields::usb_source_ip).as_string());
+            const auto source_port_p = transport_params.at(0).at(nmos::fields::usb_source_port).is_integer()
+                ? transport_params.at(0).at(nmos::fields::usb_source_port).as_integer()
+                : 5004;
+            
+            std::string sdp;
+            if (leg_count >= 2)
+            {
+                const auto source_ip_s = utility::us2s(transport_params.at(1).at(nmos::fields::usb_source_ip).as_string());
+                const auto source_port_s = transport_params.at(1).at(nmos::fields::usb_source_port).is_integer()
+                    ? transport_params.at(1).at(nmos::fields::usb_source_port).as_integer()
+                    : 5004;
+
+                sdp = (boost::format(two_leg_sdp)
+                    % source_ip_p     // %1%
+                    % source_port_p   // %2%
+                    % source_port_s   // %3%
+                    % source_ip_s     // %4%
+                    ).str();
+            }
+            else
+            {
+                sdp = (boost::format(single_leg_sdp)
+                    % source_ip_p       // %1%
+                    % source_port_p     // %2%
+                    ).str();
+            }
 
             endpoint_transportfile = nmos::make_connection_usb_sender_transportfile(utility::s2us(sdp));
             
