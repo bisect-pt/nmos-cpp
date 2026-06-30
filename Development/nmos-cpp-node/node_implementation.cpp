@@ -1015,7 +1015,7 @@ void node_implementation_init(nmos::node_model& model, nmos::experimental::contr
             nmos::resource receiver;
             if (impl::ports::usb_data == port)
             {
-                receiver = nmos::make_receiver(receiver_id, device_id, nmos::transports::usb, {},  nmos::formats::data, {nmos::media_types::app_usb} , model.settings);
+                receiver = nmos::make_receiver(receiver_id, device_id, nmos::transports::usb, interface_names,  nmos::formats::data, {nmos::media_types::app_usb} , model.settings);
                 receiver.data[nmos::fields::version] = receiver.data[nmos::fields::caps][nmos::fields::version] = value(nmos::make_version());
             }
             impl::set_label_description(receiver, port, index);
