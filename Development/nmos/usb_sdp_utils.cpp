@@ -113,20 +113,24 @@ namespace nmos
                     return {};
             }());
 
-            if (usb_params.mediaclk.clock_source.name.empty()){
+            if (!usb_params.mediaclk)
+            {
                 // a=mediaclk (fall back to session-level)
-                usb_params.mediaclk = [&]() -> sdp_parameters::mediaclk_t
+                usb_params.mediaclk = [&]() -> bst::optional<sdp_parameters::mediaclk_t>
                 {
                     auto mclk_it = sdp::find_name(media_attributes, sdp::attributes::mediaclk);
                     if (media_attributes.end() == mclk_it)
                     {
                         mclk_it = sdp::find_name(session_attributes, sdp::attributes::mediaclk);
                         if (session_attributes.end() == mclk_it)
-                            return {};
+                            return bst::nullopt;
                     }
                     const auto& val = sdp::fields::value(*mclk_it).as_string();
                     const auto eq = val.find(U('='));
-                    return { sdp::media_clock_source{ val.substr(0, eq) }, utility::string_t::npos != eq ? val.substr(eq + 1) : utility::string_t{} };
+                    return sdp_parameters::mediaclk_t{
+                        sdp::media_clock_source{ val.substr(0, eq) },
+                        utility::string_t::npos != eq ? val.substr(eq + 1) : utility::string_t{}
+                    };
                 }();
             }
 

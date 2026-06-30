@@ -6,6 +6,7 @@
 #include "sdp/json.h"
 #include "cpprest/json.h"
 
+#include "bst/optional.h"
 namespace nmos
 {
     struct usb_sdp_parameters
@@ -22,7 +23,7 @@ namespace nmos
         std::vector<leg_t> legs;
 
         std::vector<sdp_parameters::ts_refclk_t> ts_refclk;
-        sdp_parameters::mediaclk_t mediaclk;
+        bst::optional<sdp_parameters::mediaclk_t> mediaclk;
 
         utility::string_t setup;
         utility::string_t privacy;
