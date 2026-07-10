@@ -148,13 +148,19 @@ namespace nmos
 
             if (usb_params.privacy.empty())
             {
-                auto priv_it = sdp::find_name(media_attributes, U("privacy"));
-                if (media_attributes.end() != priv_it)
-                {
-                    const auto& pval = sdp::fields::value(*priv_it);
+                const auto read_privacy = [&](const web::json::array& attrs) -> bool {
+                    auto it = sdp::find_name(attrs, U("privacy"));
+                    if (attrs.end() == it)
+                    {
+                        return false;
+                    } 
+                    const auto& pval = sdp::fields::value(*it);
                     usb_params.privacy = pval.is_string() ? pval.as_string() : pval.serialize();
-                }
-            }            
+                    return true;
+                };
+                // media-level wins; fall back to session-level
+                read_privacy(media_attributes) || read_privacy(session_attributes);
+            }
         }
 
         if (usb_params.legs.empty())
