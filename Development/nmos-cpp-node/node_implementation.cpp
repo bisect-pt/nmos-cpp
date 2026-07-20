@@ -57,6 +57,7 @@
 #include "nmos/transport.h"
 #include "nmos/usb.h"
 #include "nmos/video_jxsv.h"
+#include "nmos/video_h265.h"
 #include "sdp/sdp.h"
 #include "nmos/usb_sdp_utils.h"
 
@@ -123,7 +124,7 @@ namespace impl
         // component_depth: controls the bits per component sample of video flows
         const web::json::field_as_integer_or component_depth{ U("component_depth"), 10 };
 
-        // video_type: media type of video flows, e.g. "video/raw" or "video/jxsv", see nmos::media_types
+        // video_type: media type of video flows, e.g. "video/raw" or "video/jxsv" or "video/h265", see nmos::media_types
         const web::json::field_as_string_or video_type{ U("video_type"), U("video/raw") };
 
         // mxl_video_type: media type of MXL video flows and receivers, e.g. "video/v210" or "video/v210a", see nmos/mxl.h
@@ -144,12 +145,14 @@ namespace impl
 
     nmos::interlace_mode get_interlace_mode(const nmos::settings& settings);
 
+    uint64_t get_bit_rate(const nmos::rational& grain_rate, uint32_t frame_width, uint32_t frame_height, double bits_per_pixel);
+
     // the different kinds of 'port' (standing for the format/media type/event type) implemented by the example node
     // each 'port' of the example node has a source, flow, sender and/or compatible receiver
     DEFINE_STRING_ENUM(port)
     namespace ports
     {
-        // video/raw, video/jxsv, etc.
+        // video/raw, video/jxsv, video/h265 etc.
         const port video{ U("v") };
         // audio/L24
         const port audio{ U("a") };
@@ -464,6 +467,18 @@ void node_implementation_init(nmos::node_model& model, nmos::experimental::contr
     const auto bits_per_pixel = 2.0;
     const auto transport_bit_rate_factor = 1.05;
 
+    // for now, some typical values for video/H265
+    // see https://specs.amwa.tv/bcp-006-03/branches/v1.0-dev/docs/NMOS_With_H.265.html
+    const auto h265_profile = nmos::video_h265::profiles::Main10;
+    const auto h265_level = nmos::video_h265::levels::Main_4;
+    // H.265 is far more efficient than JPEG XS; ~0.05 bits/pixel is a typical
+    // contribution-quality operating point, ~0.2 an upper bound for the Receiver's caps
+    const auto h265_bits_per_pixel = 0.05;
+    const auto h265_max_bits_per_pixel = 0.2;
+    const auto h265_constant_bit_rate = false;
+    const auto h265_parameter_sets_flow_mode = nmos::video_h265::parameter_sets_flow_modes::statik;
+    const auto h265_parameter_sets_transport_mode = nmos::video_h265::parameter_sets_transport_modes::in_band;
+
     // any delay between updates to the model resources is unnecessary unless for debugging purposes
     const unsigned int delay_millis{ 0 };
 
@@ -630,6 +645,18 @@ void node_implementation_init(nmos::node_model& model, nmos::experimental::contr
                         model.settings
                     );
                 }
+                else if (nmos::media_types::video_H265 == video_type)
+                {
+                    const auto format_bit_rate = impl::get_bit_rate(frame_rate, frame_width, frame_height, h265_bits_per_pixel);
+                    flow = nmos::make_video_H265_flow(
+                        flow_id, source_id, device_id,
+                        frame_rate,
+                        frame_width, frame_height, interlace_mode,
+                        colorspace, transfer_characteristic, sampling, bit_depth,
+                        h265_profile, h265_level, format_bit_rate, h265_constant_bit_rate,
+                        model.settings
+                    );
+                }
                 else
                 {
                     flow = nmos::make_coded_video_flow(
@@ -680,6 +707,18 @@ void node_implementation_init(nmos::node_model& model, nmos::experimental::contr
                 const auto transport_bit_rate = uint64_t(transport_bit_rate_factor * format_bit_rate / 1e3 + 0.5) * 1000;
                 sender.data[nmos::fields::bit_rate] = value(transport_bit_rate);
                 sender.data[nmos::fields::st2110_21_sender_type] = value(nmos::st2110_21_sender_types::type_N.name);
+            }
+            else if (impl::ports::video == port && nmos::media_types::video_H265 == video_type)
+            {
+                // additional attributes required by BCP-006-03
+                // see https://specs.amwa.tv/bcp-006-03/branches/v1.0-dev/docs/NMOS_With_H.265.html#senders
+                const auto format_bit_rate = impl::get_bit_rate(frame_rate, frame_width, frame_height, h265_bits_per_pixel);
+                const auto transport_bit_rate = uint64_t(transport_bit_rate_factor * format_bit_rate / 1e3 + 0.5) * 1000;
+                sender.data[nmos::fields::bit_rate] = value(transport_bit_rate);
+                sender.data[nmos::fields::parameter_sets_flow_mode] = value(h265_parameter_sets_flow_mode.name);
+                sender.data[nmos::fields::parameter_sets_transport_mode] = value(h265_parameter_sets_transport_mode.name);
+                // packet_transmission_mode omitted; "non_interleaved_nal_units" is the default
+                // st2110_21_sender_type omitted; this Sender is not ST 2110-22 compliant
             }
             impl::set_label_description(sender, port, index);
             impl::insert_group_hint(sender, port, index);
@@ -753,6 +792,41 @@ void node_implementation_init(nmos::node_model& model, nmos::experimental::contr
                             { nmos::caps::format::bit_rate, nmos::make_caps_integer_constraint({}, nmos::no_minimum<int64_t>(), (int64_t)max_format_bit_rate) },
                             { nmos::caps::transport::bit_rate, nmos::make_caps_integer_constraint({}, nmos::no_minimum<int64_t>(), (int64_t)max_transport_bit_rate) },
                             { nmos::caps::transport::packet_transmission_mode, nmos::make_caps_string_constraint({ nmos::packet_transmission_modes::codestream.name }) }
+                        })
+                    });
+                }
+                else if (nmos::media_types::video_H265 == video_type)
+                {
+                    // some of the parameter constraints recommended by BCP-006-03
+                    // see https://specs.amwa.tv/bcp-006-03/branches/v1.0-dev/docs/NMOS_With_H.265.html#receivers
+                    const auto max_format_bit_rate = impl::get_bit_rate(frame_rate, frame_width, frame_height, h265_max_bits_per_pixel);
+                    const auto max_transport_bit_rate = uint64_t(transport_bit_rate_factor * max_format_bit_rate / 1e3 + 0.5) * 1000;
+
+                    receiver.data[nmos::fields::caps][nmos::fields::constraint_sets] = value_of({
+                        value_of({
+                            // this example Receiver supports the profiles it can express, i.e. those in the profile table
+                            { nmos::caps::format::profile, nmos::make_caps_string_constraint({
+                                nmos::video_h265::profiles::Main.name,
+                                nmos::video_h265::profiles::Main10.name }) },
+                            { nmos::caps::format::level, nmos::make_caps_string_constraint({
+                                nmos::video_h265::levels::Main_3_1.name,
+                                nmos::video_h265::levels::Main_4.name,
+                                nmos::video_h265::levels::Main_4_1.name,
+                                nmos::video_h265::levels::Main_5.name,
+                                nmos::video_h265::levels::Main_5_1.name }) },
+                            { nmos::caps::format::bit_rate, nmos::make_caps_integer_constraint({}, nmos::no_minimum<int64_t>(), (int64_t)max_format_bit_rate) },
+                            { nmos::caps::format::constant_bit_rate, nmos::make_caps_boolean_constraint({ false }) },
+                            { nmos::caps::transport::bit_rate, nmos::make_caps_integer_constraint({}, nmos::no_minimum<int64_t>(), (int64_t)max_transport_bit_rate) },
+                            { nmos::caps::transport::packet_transmission_mode, nmos::make_caps_string_constraint({
+                                nmos::video_h265::packet_transmission_modes::non_interleaved_nal_units.name }) },
+                            { nmos::caps::transport::parameter_sets_flow_mode, nmos::make_caps_string_constraint({
+                                nmos::video_h265::parameter_sets_flow_modes::strict.name,
+                                nmos::video_h265::parameter_sets_flow_modes::statik.name,
+                                nmos::video_h265::parameter_sets_flow_modes::dynamic.name }) },
+                            { nmos::caps::transport::parameter_sets_transport_mode, nmos::make_caps_string_constraint({
+                                nmos::video_h265::parameter_sets_transport_modes::in_band.name,
+                                nmos::video_h265::parameter_sets_transport_modes::out_of_band.name,
+                                nmos::video_h265::parameter_sets_transport_modes::in_and_out_of_band.name }) }
                         })
                     });
                 }
@@ -2178,6 +2252,10 @@ nmos::transport_file_parser make_node_implementation_transport_file_parser()
             {
                 nmos::validate_video_jxsv_sdp_parameters(receiver, sdp_params);
             }
+            else if (nmos::media_types::video_H265 == nmos::get_media_type(sdp_params))
+            {
+                nmos::validate_video_H265_sdp_parameters(receiver, sdp_params);
+            }
             else
             {
                 // validate core media types, i.e., "video/raw", "audio/L", "video/smpte291" and "video/SMPTE2022-6"
@@ -2419,6 +2497,31 @@ a=setup:passive)";
                         const auto ts_refclk = nmos::details::make_ts_refclk(node->data, source->data, sender.data, {});
                         return nmos::make_sdp_parameters(nmos::fields::label(sender.data), params, nmos::details::payload_type_video_default, mids, ts_refclk);
                     }
+                    else if (nmos::media_types::video_H265 == video_type)
+                    {
+                        // nmos-cpp does not construct "video/H265" SDP transport files; the fmtp
+                        // parameters are assembled here from the IS-04 Flow and Sender attributes
+                        // see https://tools.ietf.org/html/rfc7798#section-7.1
+                        const nmos::video_h265::profile profile{ nmos::fields::profile(flow->data) };
+                        const nmos::video_h265::level level{ nmos::fields::level(flow->data) };
+                        const auto ptl = nmos::video_h265::make_profile_tier_level(profile, level);
+
+                        nmos::sdp_parameters::rtpmap_t rtpmap{ nmos::details::payload_type_video_default, U("H265"), 90000 };
+
+                        nmos::sdp_parameters::fmtp_t fmtp;
+                        if (0 != ptl.profile_space) fmtp.push_back({ sdp::video_h265::fields::profile_space, utility::ostringstreamed(ptl.profile_space) });
+                        fmtp.push_back({ sdp::video_h265::fields::profile_id, utility::ostringstreamed(ptl.profile_id) });
+                        fmtp.push_back({ sdp::video_h265::fields::profile_compatibility_indicator, sdp::video_h265::make_hex_string(ptl.profile_compatibility_indicator, 4) });
+                        fmtp.push_back({ sdp::video_h265::fields::interop_constraints, sdp::video_h265::make_hex_string(ptl.interop_constraints, 6) });
+                        if (0 != ptl.tier_flag) fmtp.push_back({ sdp::video_h265::fields::tier_flag, utility::ostringstreamed(ptl.tier_flag) });
+                        fmtp.push_back({ sdp::video_h265::fields::level_id, utility::ostringstreamed(ptl.level_id) });
+                        // this example Sender conveys the parameter sets in-band, so no sprop-vps/sps/pps,
+                        // uses the non-interleaved mode, so no sprop-max-don-diff, and SRST, which is the default
+
+                        const auto bit_rate = nmos::fields::bit_rate(sender.data);
+                        const auto ts_refclk = nmos::details::make_ts_refclk(node->data, source->data, sender.data, {});
+                        return nmos::sdp_parameters{ nmos::fields::label(sender.data), sdp::media_types::video, rtpmap, fmtp, (uint64_t)bit_rate, {}, {}, {}, mids, ts_refclk };
+                    }     
                     else
                     {
                         throw std::logic_error("unexpected flow media_type");
@@ -2671,6 +2774,13 @@ nmos::create_device_model_object_handler make_create_device_model_object_handler
 
 namespace impl
 {
+    // calculate a format bit rate (kilobits/second) from frame rate, dimensions and bits per pixel
+    uint64_t get_bit_rate(const nmos::rational& grain_rate, uint32_t frame_width, uint32_t frame_height, double bits_per_pixel)
+    {
+        const auto pixels_per_second = (int64_t)frame_width * (int64_t)frame_height * grain_rate;
+        return uint64_t(boost::rational_cast<double>(pixels_per_second) * bits_per_pixel / 1e3 + 0.5);
+    }
+
     nmos::interlace_mode get_interlace_mode(const nmos::settings& settings)
     {
         if (settings.has_field(impl::fields::interlace_mode))
