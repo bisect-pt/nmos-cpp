@@ -1128,6 +1128,7 @@ set(NMOS_CPP_NMOS_SOURCES
     nmos/system_api.cpp
     nmos/system_resources.cpp
     nmos/video_jxsv.cpp
+    nmos/video_h265.cpp
     nmos/ws_api_utils.cpp
     )
 set(NMOS_CPP_NMOS_HEADERS
@@ -1269,6 +1270,7 @@ set(NMOS_CPP_NMOS_HEADERS
     nmos/usb_sdp_utils.h
     nmos/version.h
     nmos/video_jxsv.h
+    nmos/video_h265.h
     nmos/vpid_code.h
     nmos/websockets.h
     nmos/ws_api_utils.h
