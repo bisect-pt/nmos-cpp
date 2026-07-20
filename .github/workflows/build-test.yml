@@ -401,7 +401,6 @@ jobs:
         # Install AMWA NMOS Testing Tool
         git clone https://github.com/bisect-pt/nmos-testing.git
         cd nmos-testing
-        git checkout ma/dev/support-ipmx-usb
 
 
         # Configure the Testing Tool so all APIs are tested with TLS and authorization
