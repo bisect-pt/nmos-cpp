@@ -466,6 +466,7 @@ set(NMOS_IS05_V1_1_SCHEMAS_JSON
     third_party/is-05/${NMOS_IS05_V1_1_TAG}/APIs/schemas/constraints-schema-mqtt.json
     third_party/is-05/${NMOS_IS05_V1_1_TAG}/APIs/schemas/constraints-schema-rtp.json
     third_party/is-05/${NMOS_IS05_V1_1_TAG}/APIs/schemas/constraints-schema-websocket.json
+    third_party/is-05/${NMOS_IS05_V1_1_TAG}/APIs/schemas/constraints-schema-usb.json
     third_party/is-05/${NMOS_IS05_V1_1_TAG}/APIs/schemas/constraints-schema.json
     third_party/is-05/${NMOS_IS05_V1_1_TAG}/APIs/schemas/error.json
     third_party/is-05/${NMOS_IS05_V1_1_TAG}/APIs/schemas/receiver_transport_params.json
@@ -474,6 +475,7 @@ set(NMOS_IS05_V1_1_SCHEMAS_JSON
     third_party/is-05/${NMOS_IS05_V1_1_TAG}/APIs/schemas/receiver_transport_params_mqtt.json
     third_party/is-05/${NMOS_IS05_V1_1_TAG}/APIs/schemas/receiver_transport_params_rtp.json
     third_party/is-05/${NMOS_IS05_V1_1_TAG}/APIs/schemas/receiver_transport_params_websocket.json
+    third_party/is-05/${NMOS_IS05_V1_1_TAG}/APIs/schemas/receiver_transport_params_usb.json
     third_party/is-05/${NMOS_IS05_V1_1_TAG}/APIs/schemas/receiver-response-schema.json
     third_party/is-05/${NMOS_IS05_V1_1_TAG}/APIs/schemas/receiver-stage-schema.json
     third_party/is-05/${NMOS_IS05_V1_1_TAG}/APIs/schemas/receiver-transport-file.json
@@ -483,6 +485,7 @@ set(NMOS_IS05_V1_1_SCHEMAS_JSON
     third_party/is-05/${NMOS_IS05_V1_1_TAG}/APIs/schemas/sender_transport_params_mqtt.json
     third_party/is-05/${NMOS_IS05_V1_1_TAG}/APIs/schemas/sender_transport_params_rtp.json
     third_party/is-05/${NMOS_IS05_V1_1_TAG}/APIs/schemas/sender_transport_params_websocket.json
+    third_party/is-05/${NMOS_IS05_V1_1_TAG}/APIs/schemas/sender_transport_params_usb.json
     third_party/is-05/${NMOS_IS05_V1_1_TAG}/APIs/schemas/sender-receiver-base.json
     third_party/is-05/${NMOS_IS05_V1_1_TAG}/APIs/schemas/sender-response-schema.json
     third_party/is-05/${NMOS_IS05_V1_1_TAG}/APIs/schemas/sender-stage-schema.json
@@ -1117,6 +1120,7 @@ set(NMOS_CPP_NMOS_SOURCES
     nmos/schemas_api.cpp
     nmos/sdp_attributes.cpp
     nmos/sdp_utils.cpp
+    nmos/usb_sdp_utils.cpp
     nmos/server.cpp
     nmos/server_utils.cpp
     nmos/settings.cpp
@@ -1261,6 +1265,8 @@ set(NMOS_CPP_NMOS_HEADERS
     nmos/transfer_characteristic.h
     nmos/transport.h
     nmos/type.h
+    nmos/usb.h
+    nmos/usb_sdp_utils.h
     nmos/version.h
     nmos/video_jxsv.h
     nmos/vpid_code.h

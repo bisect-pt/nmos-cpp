@@ -21,6 +21,7 @@ namespace nmos
 
         const transport mqtt{ U("urn:x-nmos:transport:mqtt") };
         const transport websocket{ U("urn:x-nmos:transport:websocket") };
+        const transport usb{ U("urn:x-nmos:transport:usb") };
 
         const transport mxl{ U("urn:x-nmos:transport:mxl") };
     }

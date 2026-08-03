@@ -97,6 +97,12 @@ namespace nmos
 
     nmos::resource make_connection_mxl_sender(const nmos::id& id, const nmos::id& mxl_domain_id, const nmos::id& mxl_flow_id);
     nmos::resource make_connection_mxl_receiver(const nmos::id& id, const nmos::id& mxl_domain_id);
+    
+    web::json::value make_connection_usb_sender_transportfile(const utility::string_t& transportfile);
+
+    nmos::resource make_connection_usb_sender(const nmos::id& id, bool redundant);
+
+    nmos::resource make_connection_usb_receiver(const nmos::id& id, bool redundant);
 }
 
 #endif
