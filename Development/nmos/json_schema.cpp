@@ -475,7 +475,14 @@ namespace nmos
             return result;
         }
 
-        static std::map<web::uri, web::json::value> schemas = make_schemas();
+        // Built on first use rather than during static initialization: make_schemas() parses JSON, and
+        // cpprestsdk's scoped_c_thread_locale::c_locale() is not safe to call before cpprestsdk's own
+        // globals are initialized (e.g. when the library is dlopen'ed while the process locale is not "C").
+        static const std::map<web::uri, web::json::value>& schemas()
+        {
+            static const std::map<web::uri, web::json::value> instance = make_schemas();
+            return instance;
+        }
     }
 
     namespace experimental
@@ -603,9 +610,11 @@ namespace nmos
         // load the json schema for the specified base URI
         web::json::value load_json_schema(const web::uri& id)
         {
-            auto found = nmos::details::schemas.find(id);
+            const auto& schemas = nmos::details::schemas();
+            
+            auto found = schemas.find(id);
 
-            if (nmos::details::schemas.end() == found)
+            if (schemas.end() == found)
             {
                 throw web::json::json_exception((_XPLATSTR("schema not found for ") + id.to_string()).c_str());
             }
