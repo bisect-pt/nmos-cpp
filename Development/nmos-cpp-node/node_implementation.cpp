@@ -3008,14 +3008,20 @@ nmos::experimental::details::streamcompatibility_sender_validator make_node_impl
     using nmos::experimental::make_streamcompatibility_sdp_constraint_sets_matcher;
 
     const auto validate_video_jxsv_sender_resources = make_streamcompatibility_sender_resources_validator(&nmos::experimental::match_video_jxsv_resource_parameters_constraint_set, make_streamcompatibility_sdp_constraint_sets_matcher(&nmos::match_video_jxsv_sdp_parameters_constraint_sets));
+    const auto validate_video_H265_sender_resources = make_streamcompatibility_sender_resources_validator(&nmos::experimental::match_video_H265_resource_parameters_constraint_set, make_streamcompatibility_sdp_constraint_sets_matcher(&nmos::match_video_H265_sdp_parameters_constraint_sets));
     const auto validate_sender_resources = make_streamcompatibility_sender_resources_validator(&nmos::experimental::match_resource_parameters_constraint_set, make_streamcompatibility_sdp_constraint_sets_matcher(&nmos::match_sdp_parameters_constraint_sets));
 
-    return [validate_video_jxsv_sender_resources, validate_sender_resources](const nmos::resource& source, const nmos::resource& flow, const nmos::resource& sender, const nmos::resource& connection_sender, const web::json::array& constraint_sets) -> std::pair<nmos::sender_state, utility::string_t>
+    return [validate_video_jxsv_sender_resources, validate_video_H265_sender_resources, validate_sender_resources](const nmos::resource& source, const nmos::resource& flow, const nmos::resource& sender, const nmos::resource& connection_sender, const web::json::array& constraint_sets) -> std::pair<nmos::sender_state, utility::string_t>
     {
         if (nmos::media_types::video_jxsv.name == nmos::fields::media_type(flow.data))
         {
             // validate "video/jxsv"
             return validate_video_jxsv_sender_resources(source, flow, sender, connection_sender, constraint_sets);
+        }
+        else if (nmos::media_types::video_H265.name == nmos::fields::media_type(flow.data))
+        {
+            // validate "video/H265"
+            return validate_video_H265_sender_resources(source, flow, sender, connection_sender, constraint_sets);
         }
         else
         {

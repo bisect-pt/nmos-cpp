@@ -1,7 +1,11 @@
 #ifndef NMOS_VIDEO_H265_H
 #define NMOS_VIDEO_H265_H
 
+#include <functional>
+#include <map>
 #include <utility>
+#include "nmos/capabilities.h"
+#include "nmos/json_fields.h"
 #include "nmos/media_type.h"
 #include "nmos/node_resources.h"
 #include "nmos/sdp_utils.h"
@@ -350,6 +354,12 @@ namespace nmos
     // Validate SDP parameters for "video/H265" against IS-04 receiver capabilities
     void validate_video_H265_sdp_parameters(const web::json::value& receiver, const nmos::sdp_parameters& sdp_params);
 
+    // Check the specified SDP parameters against the specified constraint sets
+    // for "video/H265"
+    // As for validate_video_H265_sdp_parameters, constraints on parameters that RFC 7798 does not carry,
+    // e.g. frame width or color sampling, are not checked against the SDP
+    bool match_video_H265_sdp_parameters_constraint_sets(const web::json::array& constraint_sets, const sdp_parameters& sdp_params);
+
     // See https://specs.amwa.tv/bcp-006-03/branches/v1.0-dev/docs/NMOS_With_H.265.html#flows
     // cf. nmos::make_coded_video_flow
     nmos::resource make_video_H265_flow(
@@ -369,6 +379,42 @@ namespace nmos
         uint64_t bit_rate, // format bit rate (kilobits/second)
         bool constant_bit_rate,
         const nmos::settings& settings);
+
+    namespace experimental
+    {
+        // IS-11 constraints on the attributes of a "video/H265" Flow and Sender
+        // See https://specs.amwa.tv/bcp-006-03/branches/v1.0-dev/docs/NMOS_With_H.265.html#flows
+        // and https://specs.amwa.tv/bcp-006-03/branches/v1.0-dev/docs/NMOS_With_H.265.html#senders
+        // A constraint on an optional attribute that the resource omits is not checked,
+        // like a constraint on a parameter that the SDP transport file omits
+        const std::map<utility::string_t, std::function<bool(const web::json::value& flow, const web::json::value& con)>> video_H265_flow_parameter_constraints
+        {
+            { nmos::caps::format::media_type, [](const web::json::value& flow, const web::json::value& con) { return nmos::match_string_constraint(nmos::fields::media_type(flow), con); } },
+            { nmos::caps::format::grain_rate, [](const web::json::value& flow, const web::json::value& con) { return nmos::match_rational_constraint(nmos::parse_rational(nmos::fields::grain_rate(flow)), con); } },
+            { nmos::caps::format::profile, [](const web::json::value& flow, const web::json::value& con) { return !flow.has_field(nmos::fields::profile) || nmos::match_string_constraint(nmos::fields::profile(flow), con); } },
+            { nmos::caps::format::level, [](const web::json::value& flow, const web::json::value& con) { return !flow.has_field(nmos::fields::level) || nmos::match_string_constraint(nmos::fields::level(flow), con); } },
+            { nmos::caps::format::frame_height, [](const web::json::value& flow, const web::json::value& con) { return nmos::match_integer_constraint(nmos::fields::frame_height(flow), con); } },
+            { nmos::caps::format::frame_width, [](const web::json::value& flow, const web::json::value& con) { return nmos::match_integer_constraint(nmos::fields::frame_width(flow), con); } },
+            { nmos::caps::format::color_sampling, [](const web::json::value& flow, const web::json::value& con) { return nmos::match_string_constraint(nmos::details::make_sampling(nmos::fields::components(flow)).name, con); } },
+            { nmos::caps::format::interlace_mode, [](const web::json::value& flow, const web::json::value& con) { return nmos::match_string_constraint(nmos::fields::interlace_mode(flow), con); } },
+            { nmos::caps::format::colorspace, [](const web::json::value& flow, const web::json::value& con) { return nmos::match_string_constraint(nmos::fields::colorspace(flow), con); } },
+            { nmos::caps::format::transfer_characteristic, [](const web::json::value& flow, const web::json::value& con) { return nmos::match_string_constraint(nmos::fields::transfer_characteristic(flow), con); } },
+            { nmos::caps::format::component_depth, [](const web::json::value& flow, const web::json::value& con) { return nmos::match_integer_constraint(nmos::fields::bit_depth(nmos::fields::components(flow).at(0)), con); } },
+            { nmos::caps::format::bit_rate, [](const web::json::value& flow, const web::json::value& con) { return !flow.has_field(nmos::fields::bit_rate) || nmos::match_integer_constraint(nmos::fields::bit_rate(flow), con); } },
+            { nmos::caps::format::constant_bit_rate, [](const web::json::value& flow, const web::json::value& con) { return nmos::match_boolean_constraint(nmos::fields::constant_bit_rate(flow), con); } }
+        };
+
+        const std::map<utility::string_t, std::function<bool(const web::json::value& sender, const web::json::value& con)>> video_H265_sender_parameter_constraints
+        {
+            // "non_interleaved_nal_units" is the default when the Sender omits the attribute
+            { nmos::caps::transport::packet_transmission_mode, [](const web::json::value& sender, const web::json::value& con) { return nmos::match_string_constraint(sender.has_field(nmos::fields::packet_transmission_mode) ? nmos::fields::packet_transmission_mode(sender) : nmos::video_h265::packet_transmission_modes::non_interleaved_nal_units.name, con); } },
+            { nmos::caps::transport::parameter_sets_flow_mode, [](const web::json::value& sender, const web::json::value& con) { return nmos::match_string_constraint(nmos::fields::parameter_sets_flow_mode(sender), con); } },
+            { nmos::caps::transport::parameter_sets_transport_mode, [](const web::json::value& sender, const web::json::value& con) { return nmos::match_string_constraint(nmos::fields::parameter_sets_transport_mode(sender), con); } },
+            { nmos::caps::transport::bit_rate, [](const web::json::value& sender, const web::json::value& con) { return !sender.has_field(nmos::fields::bit_rate) || nmos::match_integer_constraint(nmos::fields::bit_rate(sender), con); } }
+        };
+
+        bool match_video_H265_resource_parameters_constraint_set(const nmos::resource& resource, const web::json::value& constraint_set);
+    }
 }
 
 #endif
