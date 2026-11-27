@@ -8,6 +8,7 @@
 #include "nmos/interlace_mode.h"
 #include "nmos/json_fields.h"
 #include "nmos/resource.h"
+#include "nmos/streamcompatibility_validation.h"
 
 namespace nmos
 {
@@ -289,6 +290,32 @@ namespace nmos
         if (sdp::video_h265::tx_modes::SRST != params.tx_mode) throw nmos::details::sdp_processing_error("unsupported tx-mode; only SRST is supported");
 
         nmos::details::validate_sdp_parameters(details::h265_constraints, sdp_params, nmos::formats::video, params, receiver);
+    }
+
+    // Check the specified SDP parameters against the specified constraint sets
+    // for "video/H265"
+    bool match_video_H265_sdp_parameters_constraint_sets(const web::json::array& constraint_sets, const sdp_parameters& sdp_params)
+    {
+        const auto format_params = get_video_H265_parameters(sdp_params);
+        const auto found = std::find_if(constraint_sets.begin(), constraint_sets.end(), [&](const web::json::value& constraint_set) { return details::match_sdp_parameters_constraint_set(details::h265_constraints, sdp_params, format_params, constraint_set); });
+        return constraint_sets.end() != found;
+    }
+
+    bool experimental::match_video_H265_resource_parameters_constraint_set(const nmos::resource& resource, const web::json::value& constraint_set)
+    {
+        const std::map<nmos::type, nmos::experimental::parameter_constraints> resource_parameter_constraints
+        {
+            { nmos::types::source,  nmos::experimental::source_parameter_constraints },
+            { nmos::types::flow,    nmos::experimental::video_H265_flow_parameter_constraints },
+            { nmos::types::sender,  nmos::experimental::video_H265_sender_parameter_constraints }
+        };
+
+        if (0 == resource_parameter_constraints.count(resource.type))
+        {
+            throw std::logic_error("wrong resource type");
+        }
+
+        return nmos::experimental::detail::match_resource_parameters_constraint_set(resource_parameter_constraints.at(resource.type), resource.data, constraint_set);
     }
 
     // See https://specs.amwa.tv/bcp-006-03/branches/v1.0-dev/docs/NMOS_With_H.265.html#flows

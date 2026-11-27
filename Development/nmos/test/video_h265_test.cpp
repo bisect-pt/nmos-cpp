@@ -2,11 +2,16 @@
 
 #include "bst/test/test.h"
 #include "nmos/capabilities.h"
+#include "nmos/colorspace.h"
 #include "nmos/json_fields.h"
 #include "nmos/node_resources.h"
 #include "nmos/transport.h"
 #include "nmos/resource.h"
+#include "nmos/transfer_characteristic.h"
 #include "nmos/format.h"
+#include "nmos/interlace_mode.h"
+#include "nmos/is04_versions.h"
+#include "nmos/type.h"
 #include "sdp/sdp.h"
 
 namespace
@@ -244,4 +249,151 @@ a=fmtp:96 profile-id=1; level-id=93; tx-mode=MRST
 )";
     auto receiver = nmos::make_receiver(U("receiver"), U("device"), nmos::transports::rtp, { U("eth0") }, nmos::formats::video, { nmos::media_types::video_H265 }, nmos::settings{});
     BST_REQUIRE_THROW(nmos::validate_video_H265_sdp_parameters(receiver.data, parse(test_sdp)), std::runtime_error);
+}
+
+////////////////////////////////////////////////////////////////////////////////////////////
+BST_TEST_CASE(testMatchVideoH265SdpParametersConstraintSets)
+{
+    using web::json::value;
+    using web::json::value_of;
+
+    // Main10, Main-4, 20000 kbit/s, parameter sets in-band, non-interleaved
+    const auto s = parse(test_sdp_in_band);
+
+    // a constraint set that the Sender satisfies
+    BST_REQUIRE(nmos::match_video_H265_sdp_parameters_constraint_sets(value_of({
+        value_of({
+            { nmos::caps::format::media_type, nmos::make_caps_string_constraint({ nmos::media_types::video_H265.name }) },
+            { nmos::caps::format::profile, nmos::make_caps_string_constraint({ nmos::video_h265::profiles::Main.name, nmos::video_h265::profiles::Main10.name }) },
+            { nmos::caps::format::level, nmos::make_caps_string_constraint({ nmos::video_h265::levels::Main_4.name }) },
+            { nmos::caps::transport::bit_rate, nmos::make_caps_integer_constraint({}, nmos::no_minimum<int64_t>(), 50000) },
+            { nmos::caps::transport::packet_transmission_mode, nmos::make_caps_string_constraint({ nmos::video_h265::packet_transmission_modes::non_interleaved_nal_units.name }) },
+            { nmos::caps::transport::parameter_sets_transport_mode, nmos::make_caps_string_constraint({ nmos::video_h265::parameter_sets_transport_modes::in_band.name }) }
+        })
+    }).as_array(), s));
+
+    // the Sender is Main10, so a Main-only constraint set does not match
+    const auto main_only = value_of({
+        { nmos::caps::format::profile, nmos::make_caps_string_constraint({ nmos::video_h265::profiles::Main.name }) }
+    });
+    BST_REQUIRE(!nmos::match_video_H265_sdp_parameters_constraint_sets(value_of({ main_only }).as_array(), s));
+
+    // one matching constraint set is enough
+    BST_REQUIRE(nmos::match_video_H265_sdp_parameters_constraint_sets(value_of({
+        main_only,
+        value_of({
+            { nmos::caps::format::profile, nmos::make_caps_string_constraint({ nmos::video_h265::profiles::Main10.name }) }
+        })
+    }).as_array(), s));
+
+    // the Sender is 20000 kbit/s
+    BST_REQUIRE(!nmos::match_video_H265_sdp_parameters_constraint_sets(value_of({
+        value_of({
+            { nmos::caps::transport::bit_rate, nmos::make_caps_integer_constraint({}, nmos::no_minimum<int64_t>(), 10000) }
+        })
+    }).as_array(), s));
+
+    // a constraint set that is not enabled does not match
+    BST_REQUIRE(!nmos::match_video_H265_sdp_parameters_constraint_sets(value_of({
+        value_of({
+            { nmos::caps::meta::enabled, false },
+            { nmos::caps::format::profile, nmos::make_caps_string_constraint({ nmos::video_h265::profiles::Main10.name }) }
+        })
+    }).as_array(), s));
+
+    // constraints on parameters that RFC 7798 does not carry are not checked against the SDP
+    BST_REQUIRE(nmos::match_video_H265_sdp_parameters_constraint_sets(value_of({
+        value_of({
+            { nmos::caps::format::frame_width, nmos::make_caps_integer_constraint({ 1280 }) },
+            { nmos::caps::format::color_sampling, nmos::make_caps_string_constraint({ sdp::samplings::YCbCr_4_2_2.name }) }
+        })
+    }).as_array(), s));
+
+    // the parameter sets transport mode comes from the sprop-* parameters
+    const auto in_band_only = value_of({
+        value_of({
+            { nmos::caps::transport::parameter_sets_transport_mode, nmos::make_caps_string_constraint({ nmos::video_h265::parameter_sets_transport_modes::in_band.name }) }
+        })
+    });
+    BST_REQUIRE(nmos::match_video_H265_sdp_parameters_constraint_sets(in_band_only.as_array(), s));
+    BST_REQUIRE(!nmos::match_video_H265_sdp_parameters_constraint_sets(in_band_only.as_array(), parse(test_sdp_in_and_out_of_band)));
+}
+
+////////////////////////////////////////////////////////////////////////////////////////////
+BST_TEST_CASE(testMatchVideoH265ResourceParametersConstraintSet)
+{
+    using web::json::value;
+    using web::json::value_of;
+    using nmos::experimental::match_video_H265_resource_parameters_constraint_set;
+
+    const nmos::settings settings = value::object();
+
+    // 1080p50 Main10, Main-4, 20000 kbit/s, not constant bit rate
+    const auto flow = nmos::make_video_H265_flow(U("flow"), U("source"), U("device"), nmos::rates::rate50, 1920, 1080,
+        nmos::interlace_modes::progressive, nmos::colorspaces::BT709, nmos::transfer_characteristics::SDR, sdp::samplings::YCbCr_4_2_0, 10,
+        nmos::video_h265::profiles::Main10, nmos::video_h265::levels::Main_4, 20000, false, settings);
+
+    const auto match_flow = [&](const std::pair<utility::string_t, value>& constraint)
+    {
+        return match_video_H265_resource_parameters_constraint_set(flow, value_of({ constraint }));
+    };
+
+    BST_REQUIRE(match_flow({ nmos::caps::format::media_type, nmos::make_caps_string_constraint({ nmos::media_types::video_H265.name }) }));
+    BST_REQUIRE(!match_flow({ nmos::caps::format::media_type, nmos::make_caps_string_constraint({ nmos::media_types::video_jxsv.name }) }));
+    BST_REQUIRE(match_flow({ nmos::caps::format::profile, nmos::make_caps_string_constraint({ nmos::video_h265::profiles::Main10.name }) }));
+    BST_REQUIRE(!match_flow({ nmos::caps::format::profile, nmos::make_caps_string_constraint({ nmos::video_h265::profiles::Main.name }) }));
+    BST_REQUIRE(match_flow({ nmos::caps::format::level, nmos::make_caps_string_constraint({ nmos::video_h265::levels::Main_4.name }) }));
+    BST_REQUIRE(!match_flow({ nmos::caps::format::level, nmos::make_caps_string_constraint({ nmos::video_h265::levels::Main_4_1.name }) }));
+    BST_REQUIRE(match_flow({ nmos::caps::format::frame_width, nmos::make_caps_integer_constraint({ 1920 }) }));
+    BST_REQUIRE(!match_flow({ nmos::caps::format::frame_width, nmos::make_caps_integer_constraint({ 1280 }) }));
+    BST_REQUIRE(match_flow({ nmos::caps::format::color_sampling, nmos::make_caps_string_constraint({ sdp::samplings::YCbCr_4_2_0.name }) }));
+    BST_REQUIRE(!match_flow({ nmos::caps::format::color_sampling, nmos::make_caps_string_constraint({ sdp::samplings::YCbCr_4_2_2.name }) }));
+    BST_REQUIRE(match_flow({ nmos::caps::format::component_depth, nmos::make_caps_integer_constraint({ 10 }) }));
+    BST_REQUIRE(!match_flow({ nmos::caps::format::component_depth, nmos::make_caps_integer_constraint({ 8 }) }));
+    BST_REQUIRE(match_flow({ nmos::caps::format::bit_rate, nmos::make_caps_integer_constraint({}, nmos::no_minimum<int64_t>(), 25000) }));
+    BST_REQUIRE(!match_flow({ nmos::caps::format::bit_rate, nmos::make_caps_integer_constraint({}, nmos::no_minimum<int64_t>(), 10000) }));
+    BST_REQUIRE(match_flow({ nmos::caps::format::constant_bit_rate, nmos::make_caps_boolean_constraint({ false }) }));
+    BST_REQUIRE(!match_flow({ nmos::caps::format::constant_bit_rate, nmos::make_caps_boolean_constraint({ true }) }));
+
+    // a Flow without the optional bit_rate attribute does not reject a bit rate constraint
+    auto flow_without_bit_rate = flow;
+    flow_without_bit_rate.data.erase(nmos::fields::bit_rate);
+    BST_REQUIRE(match_video_H265_resource_parameters_constraint_set(flow_without_bit_rate, value_of({
+        { nmos::caps::format::bit_rate, nmos::make_caps_integer_constraint({}, nmos::no_minimum<int64_t>(), 10000) }
+    })));
+
+    auto sender = nmos::make_sender(U("sender"), U("flow"), U("device"), {}, settings);
+    sender.data[nmos::fields::parameter_sets_flow_mode] = value(nmos::video_h265::parameter_sets_flow_modes::statik.name);
+    sender.data[nmos::fields::parameter_sets_transport_mode] = value(nmos::video_h265::parameter_sets_transport_modes::in_band.name);
+
+    const auto match_sender = [&](const std::pair<utility::string_t, value>& constraint)
+    {
+        return match_video_H265_resource_parameters_constraint_set(sender, value_of({ constraint }));
+    };
+
+    // the Sender omits packet_transmission_mode, so it is "non_interleaved_nal_units"
+    BST_REQUIRE(match_sender({ nmos::caps::transport::packet_transmission_mode, nmos::make_caps_string_constraint({ nmos::video_h265::packet_transmission_modes::non_interleaved_nal_units.name }) }));
+    BST_REQUIRE(!match_sender({ nmos::caps::transport::packet_transmission_mode, nmos::make_caps_string_constraint({ nmos::video_h265::packet_transmission_modes::interleaved_nal_units.name }) }));
+    BST_REQUIRE(match_sender({ nmos::caps::transport::parameter_sets_flow_mode, nmos::make_caps_string_constraint({ nmos::video_h265::parameter_sets_flow_modes::statik.name }) }));
+    BST_REQUIRE(!match_sender({ nmos::caps::transport::parameter_sets_flow_mode, nmos::make_caps_string_constraint({ nmos::video_h265::parameter_sets_flow_modes::strict.name }) }));
+    BST_REQUIRE(match_sender({ nmos::caps::transport::parameter_sets_transport_mode, nmos::make_caps_string_constraint({ nmos::video_h265::parameter_sets_transport_modes::in_band.name }) }));
+    BST_REQUIRE(!match_sender({ nmos::caps::transport::parameter_sets_transport_mode, nmos::make_caps_string_constraint({ nmos::video_h265::parameter_sets_transport_modes::out_of_band.name }) }));
+    // the Sender omits the optional bit_rate attribute
+    BST_REQUIRE(match_sender({ nmos::caps::transport::bit_rate, nmos::make_caps_integer_constraint({}, nmos::no_minimum<int64_t>(), 10000) }));
+
+    sender.data[nmos::fields::packet_transmission_mode] = value(nmos::video_h265::packet_transmission_modes::interleaved_nal_units.name);
+    sender.data[nmos::fields::bit_rate] = value(20000);
+    BST_REQUIRE(match_sender({ nmos::caps::transport::packet_transmission_mode, nmos::make_caps_string_constraint({ nmos::video_h265::packet_transmission_modes::interleaved_nal_units.name }) }));
+    BST_REQUIRE(match_sender({ nmos::caps::transport::bit_rate, nmos::make_caps_integer_constraint({}, nmos::no_minimum<int64_t>(), 25000) }));
+    BST_REQUIRE(!match_sender({ nmos::caps::transport::bit_rate, nmos::make_caps_integer_constraint({}, nmos::no_minimum<int64_t>(), 10000) }));
+
+    // a constraint set that is not enabled does not match
+    BST_REQUIRE(!match_video_H265_resource_parameters_constraint_set(flow, value_of({
+        { nmos::caps::meta::enabled, false },
+        { nmos::caps::format::profile, nmos::make_caps_string_constraint({ nmos::video_h265::profiles::Main10.name }) }
+    })));
+
+    // only a Source, Flow or Sender can be checked
+    const nmos::resource device{ nmos::is04_versions::v1_3, nmos::types::device, value_of({ { nmos::fields::id, U("device") } }), false };
+    BST_REQUIRE_THROW(match_video_H265_resource_parameters_constraint_set(device, value::object()), std::logic_error);
 }
